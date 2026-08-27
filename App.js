@@ -5,7 +5,7 @@ import TrendsView from './components/TrendsView';
 import NewEntryView from './components/NewEntryView';
 import ExportModal from './components/ExportModal';
 import { getStoredEntries, saveStoredEntries } from './utils/storage';
-import { exportLogsToPDF } from './utils/pdfExport';
+import { exportLogsToPDF, exportLogsToDOCX } from './utils/exportReport';
 
 export default function App() {
   const [view, setView] = useState('log'); // 'log' | 'trends' | 'entry'
@@ -28,6 +28,11 @@ export default function App() {
 
   const handleExportPDF = async (startDate, endDate) => {
     const success = await exportLogsToPDF(entries, startDate, endDate);
+    if (success) setIsExportOpen(false);
+  };
+
+  const handleExportDOCX = async (startDate, endDate) => {
+    const success = await exportLogsToDOCX(entries, startDate, endDate);
     if (success) setIsExportOpen(false);
   };
 
@@ -71,7 +76,8 @@ export default function App() {
       <ExportModal
         visible={isExportOpen}
         onClose={() => setIsExportOpen(false)}
-        onExport={handleExportPDF}
+        onExportPDF={handleExportPDF}
+        onExportDOCX={handleExportDOCX}
       />
     </SafeAreaView>
   );

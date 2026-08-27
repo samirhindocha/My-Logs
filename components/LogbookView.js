@@ -33,7 +33,8 @@ export default function LogbookView({ entries = [], onOpenExport, onGoTrends, on
           <Text style={styles.appTitle}>This week</Text>
         </View>
         <TouchableOpacity style={styles.exportBtn} onPress={onOpenExport}>
-          <Text style={styles.exportBtnText}>Export PDF</Text>
+          <Text style={styles.exportIcon}>⤓</Text>
+          <Text style={styles.exportBtnText}>Export</Text>
         </TouchableOpacity>
       </View>
 
@@ -130,8 +131,25 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingVertical: 14, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   appSubtitle: { fontSize: 11, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase', color: '#8B9A94' },
   appTitle: { fontSize: 27, fontWeight: '800', letterSpacing: -0.5, color: '#14201C', marginTop: 3 },
-  exportBtn: { backgroundColor: '#0D6E5E', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
-  exportBtnText: { color: '#EAF6F2', fontWeight: '700', fontSize: 12 },
+  exportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0D6E5E',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 5,
+  },
+  exportIcon: {
+    color: '#EAF6F2',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  exportBtnText: {
+    color: '#EAF6F2',
+    fontWeight: '700',
+    fontSize: 12.5,
+  },
   statsContainer: { paddingHorizontal: 20, flexDirection: 'row', gap: 10 },
   statBoxPrimary: { flex: 1, backgroundColor: '#0D6E5E', borderRadius: 18, padding: 14 },
   statLabelPrimary: { fontSize: 10, fontWeight: '700', color: '#EAF6F2', opacity: 0.72, textTransform: 'uppercase', letterSpacing: 1 },

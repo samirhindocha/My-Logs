@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, Modal, TextInput, TouchableOpacity } from 'react-native';
 
-export default function ExportModal({ visible, onClose, onExport }) {
+export default function ExportModal({ visible, onClose, onExportPDF, onExportDOCX }) {
   const [startDate, setStartDate] = useState(
     new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
   );
@@ -14,14 +14,14 @@ export default function ExportModal({ visible, onClose, onExport }) {
       <View style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Export PDF Report</Text>
+            <Text style={styles.modalTitle}>Export Logs</Text>
             <TouchableOpacity onPress={onClose}>
               <Text style={styles.modalClose}>✕</Text>
             </TouchableOpacity>
           </View>
 
           <Text style={styles.modalSub}>
-            Choose date range period (YYYY-MM-DD) for your PDF report.
+            Select date range period (YYYY-MM-DD) to export the table report.
           </Text>
 
           <Text style={styles.fieldLabel}>Start Date</Text>
@@ -40,12 +40,22 @@ export default function ExportModal({ visible, onClose, onExport }) {
             onChangeText={setEndDate}
           />
 
-          <TouchableOpacity
-            style={styles.exportSubmitBtn}
-            onPress={() => onExport(startDate, endDate)}
-          >
-            <Text style={styles.exportSubmitText}>Generate & Share PDF</Text>
-          </TouchableOpacity>
+          {/* Export Action Buttons */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.exportBtn, styles.pdfBtn]}
+              onPress={() => onExportPDF(startDate, endDate)}
+            >
+              <Text style={styles.exportBtnText}>Export .PDF</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.exportBtn, styles.docxBtn]}
+              onPress={() => onExportDOCX(startDate, endDate)}
+            >
+              <Text style={styles.exportBtnText}>Export .DOCX</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -53,14 +63,79 @@ export default function ExportModal({ visible, onClose, onExport }) {
 }
 
 const styles = StyleSheet.create({
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(20,32,28,0.6)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  modalCard: { width: '100%', backgroundColor: '#FBF9F4', borderRadius: 24, padding: 20 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: '#14201C' },
-  modalClose: { fontSize: 18, fontWeight: '700', color: '#8B9A94' },
-  modalSub: { fontSize: 12, color: '#6B7A75', marginBottom: 16 },
-  fieldLabel: { fontSize: 11, fontWeight: '700', color: '#8B9A94', textTransform: 'uppercase', marginBottom: 4 },
-  modalInput: { backgroundColor: '#fff', borderWidth: 1, borderColor: 'rgba(20,32,28,0.15)', borderRadius: 12, padding: 10, fontSize: 14, fontWeight: '600', marginBottom: 12 },
-  exportSubmitBtn: { backgroundColor: '#0D6E5E', height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
-  exportSubmitText: { color: '#EAF6F2', fontWeight: '700', fontSize: 14 },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(20,32,28,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: '#FBF9F4',
+    borderRadius: 24,
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#14201C',
+  },
+  modalClose: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#8B9A94',
+  },
+  modalSub: {
+    fontSize: 12,
+    color: '#6B7A75',
+    marginBottom: 16,
+  },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#8B9A94',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  modalInput: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(20,32,28,0.15)',
+    borderRadius: 12,
+    padding: 10,
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  exportBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pdfBtn: {
+    backgroundColor: '#0D6E5E',
+  },
+  docxBtn: {
+    backgroundColor: '#2563EB',
+  },
+  exportBtnText: {
+    color: '#EAF6F2',
+    fontWeight: '700',
+    fontSize: 13.5,
+  },
 });
