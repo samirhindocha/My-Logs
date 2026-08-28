@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, SafeAreaView, StatusBar } from 'react-native';
+import { StyleSheet, SafeAreaView, StatusBar, Platform } from 'react-native';
 import LogbookView from './components/LogbookView';
 import TrendsView from './components/TrendsView';
 import NewEntryView from './components/NewEntryView';
@@ -20,10 +20,30 @@ export default function App() {
   }, []);
 
   const handleSaveEntry = async (newEntry) => {
-    const updated = [newEntry, ...entries];
+    // If updating existing entry or adding new
+    const existsIndex = entries.findIndex((e) => e.id === newEntry.id);
+    let updated;
+    if (existsIndex >= 0) {
+      updated = [...entries];
+      updated[existsIndex] = newEntry;
+    } else {
+      updated = [newEntry, ...entries];
+    }
     setEntries(updated);
     await saveStoredEntries(updated);
     setView('log');
+  };
+
+  const handleDeleteEntry = async (id) => {
+    const updated = entries.filter((e) => e.id !== id);
+    setEntries(updated);
+    await saveStoredEntries(updated);
+  };
+
+  const handleToggleHideEntry = async (id) => {
+    const updated = entries.map((e) => (e.id === id ? { ...e, hidden: !e.hidden } : e));
+    setEntries(updated);
+    await saveStoredEntries(updated);
   };
 
   const handleExportPDF = async (startDate, endDate) => {
@@ -54,6 +74,8 @@ export default function App() {
           onOpenExport={() => setIsExportOpen(true)}
           onGoTrends={() => setView('trends')}
           onOpenEntry={() => setView('entry')}
+          onDeleteEntry={handleDeleteEntry}
+          onToggleHideEntry={handleToggleHideEntry}
         />
       )}
 
@@ -68,6 +90,7 @@ export default function App() {
 
       {view === 'entry' && (
         <NewEntryView
+          existingEntries={entries}
           onSave={handleSaveEntry}
           onCancel={() => setView('log')}
         />
@@ -87,5 +110,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FBF9F4',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 0,
   },
 });

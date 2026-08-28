@@ -2,7 +2,6 @@ import { Alert, Platform } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
-// Format YYYY-MM-DD to DD-MM-YY
 const formatShortDate = (dateStr) => {
   if (!dateStr) return '';
   const parts = dateStr.split('-');
@@ -11,9 +10,11 @@ const formatShortDate = (dateStr) => {
   return `${day}-${month}-${year.slice(-2)}`;
 };
 
-// Transform raw log entries into single-row date grids
 const buildExportMatrix = (entries, startDate, endDate) => {
-  const filtered = entries.filter((e) => e.date >= startDate && e.date <= endDate);
+  // Exclude logs marked as hidden
+  const filtered = entries.filter(
+    (e) => !e.hidden && e.date >= startDate && e.date <= endDate
+  );
   const byDate = {};
 
   filtered.forEach((item) => {
@@ -29,63 +30,69 @@ const buildExportMatrix = (entries, startDate, endDate) => {
         other: [],
         am: '',
         pm: '',
+        extra: '',
       };
     }
 
     const row = byDate[item.date];
 
-    // Insulin Units (AM - PM)
     if (item.am) row.am = item.am;
     if (item.pm) row.pm = item.pm;
+    if (item.extra) row.extra = item.extra;
 
-    // Slot Mapping
+    const valDisplay = item.isExtremeLow
+      ? 'Ext Low (<50)'
+      : item.isExtremeHigh
+      ? 'Ext High (>250)'
+      : item.reading
+      ? String(item.reading)
+      : '';
+
     switch (item.slot) {
       case 'Fasting':
-        row.fasting = item.reading ? String(item.reading) : '';
+        row.fasting = valDisplay;
         break;
       case 'Before Lunch':
-        row.beforeLunch = item.reading ? String(item.reading) : '';
+        row.beforeLunch = valDisplay;
         break;
       case 'After Lunch 2hr':
       case 'After Lunch':
-        row.afterLunch = item.reading ? String(item.reading) : '';
+        row.afterLunch = valDisplay;
         break;
       case 'Before Dinner':
-        row.beforeDinner = item.reading ? String(item.reading) : '';
+        row.beforeDinner = valDisplay;
         break;
       case 'After Dinner':
-        row.afterDinner = item.reading ? String(item.reading) : '';
+        row.afterDinner = valDisplay;
         break;
       case '3 AM':
-        row.threeAm = item.reading ? String(item.reading) : '';
+        row.threeAm = valDisplay;
         break;
       default:
-        if (item.reading) {
+        if (valDisplay) {
           const timeTag = item.time ? item.time.replace(/\s+/g, '') : '';
-          row.other.push(timeTag ? `${timeTag} - ${item.reading}` : `${item.reading}`);
+          row.other.push(timeTag ? `${timeTag} - ${valDisplay}` : valDisplay);
         }
         break;
     }
   });
 
-  // Sort chronologically ascending
   return Object.keys(byDate)
     .sort((a, b) => a.localeCompare(b))
     .map((d) => {
       const r = byDate[d];
-      let unitText = '';
-      if (r.am || r.pm) {
-        unitText = `${r.am || '0'}-${r.pm || '0'}`;
-      }
+      const units = [];
+      if (r.am) units.push(`${r.am} AM`);
+      if (r.pm) units.push(`${r.pm} PM`);
+      if (r.extra) units.push(`${r.extra} Ext`);
       return {
         ...r,
         otherText: r.other.join(', '),
-        unitText,
+        unitText: units.join(' / ') || '—',
       };
     });
 };
 
-// Generate HTML representation matching the exact border-grid style
 const buildTableHtml = (rows) => {
   const tableRows = rows
     .map(
@@ -110,11 +117,11 @@ const buildTableHtml = (rows) => {
       <head>
         <meta charset="utf-8">
         <style>
-          @page { size: landscape; margin: 15mm; }
-          body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 20px; color: #000; }
-          table { width: 100%; border-collapse: collapse; border: 2px solid #000; margin-top: 10px; }
-          th, td { border: 1.5px solid #000; padding: 10px 8px; text-align: center; font-size: 15px; min-height: 36px; }
-          th { font-weight: bold; font-size: 16px; background-color: #ffffff; }
+          @page { size: landscape; margin: 12mm; }
+          body { font-family: Arial, sans-serif; padding: 15px; color: #000; }
+          table { width: 100%; border-collapse: collapse; border: 2px solid #000; }
+          th, td { border: 1.5px solid #000; padding: 8px 6px; text-align: center; font-size: 13px; }
+          th { font-weight: bold; font-size: 14px; background-color: #f3f3f3; }
         </style>
       </head>
       <body>
@@ -133,7 +140,7 @@ const buildTableHtml = (rows) => {
             </tr>
           </thead>
           <tbody>
-            ${tableRows || '<tr><td colspan="9" style="padding:20px;">No logs recorded for this period.</td></tr>'}
+            ${tableRows || '<tr><td colspan="9">No records for this period.</td></tr>'}
           </tbody>
         </table>
       </body>
@@ -141,7 +148,6 @@ const buildTableHtml = (rows) => {
   `;
 };
 
-// 1. Export as PDF
 export const exportLogsToPDF = async (entries, startDate, endDate) => {
   const rows = buildExportMatrix(entries, startDate, endDate);
   const html = buildTableHtml(rows);
@@ -151,12 +157,11 @@ export const exportLogsToPDF = async (entries, startDate, endDate) => {
     await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
     return true;
   } catch (error) {
-    Alert.alert('PDF Export Error', 'Unable to generate PDF document.');
+    Alert.alert('PDF Error', 'Unable to generate PDF file.');
     return false;
   }
 };
 
-// 2. Export as DOCX (Web & Mobile compatible without expo-file-system)
 export const exportLogsToDOCX = async (entries, startDate, endDate) => {
   const rows = buildExportMatrix(entries, startDate, endDate);
   const html = buildTableHtml(rows);
@@ -164,6 +169,8 @@ export const exportLogsToDOCX = async (entries, startDate, endDate) => {
   const docContent = `
     <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
       <head>
+        <meta charset="utf-8">
+        <title>Glucose Logs Export</title>
         <!--[if gte mso 9]>
         <xml>
           <w:WordDocument>
@@ -174,25 +181,26 @@ export const exportLogsToDOCX = async (entries, startDate, endDate) => {
         </xml>
         <![endif]-->
       </head>
-      ${html}
+      <body>
+        ${html}
+      </body>
     </html>
   `;
 
   try {
     if (Platform.OS === 'web') {
-      const blob = new Blob([docContent], {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      const blob = new Blob(['\ufeff' + docContent], {
+        type: 'application/msword;charset=utf-8',
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Glucose_Logs_${startDate}_to_${endDate}.docx`;
+      a.download = `Glucose_Logs_${startDate}_to_${endDate}.doc`;
       a.click();
       URL.revokeObjectURL(url);
       return true;
     }
 
-    // On native devices, share the document URI directly
     const { uri } = await Print.printToFileAsync({ html: docContent });
     await Sharing.shareAsync(uri, {
       UTI: 'com.microsoft.word.doc',
@@ -200,7 +208,7 @@ export const exportLogsToDOCX = async (entries, startDate, endDate) => {
     });
     return true;
   } catch (error) {
-    Alert.alert('DOCX Export Error', 'Unable to generate DOCX document.');
+    Alert.alert('Word Export Error', 'Unable to export Word document.');
     return false;
   }
 };

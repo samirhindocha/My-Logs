@@ -12,25 +12,30 @@ import {
 import { SLOTS } from '../constants/theme';
 import { formatDateDisplay, getReadingStatus } from '../utils/storage';
 
-export default function NewEntryView({ onSave, onCancel }) {
+export default function NewEntryView({ existingEntries = [], onSave, onCancel }) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedSlot, setSelectedSlot] = useState('Fasting');
   const [customLabel, setCustomLabel] = useState('');
   const [customTime, setCustomTime] = useState('10:30');
 
-  // Input states controlled via custom keypad
-  const [focusField, setFocusField] = useState('reading'); // 'reading' | 'am' | 'pm'
+  // Input fields
+  const [focusField, setFocusField] = useState('reading'); // 'reading' | 'am' | 'pm' | 'extra'
   const [reading, setReading] = useState('');
-  const [amUnits, setAmUnits] = useState('');
-  const [pmUnits, setPmUnits] = useState('');
+  const [isExtremeLow, setIsExtremeLow] = useState(false);
+  const [isExtremeHigh, setIsExtremeHigh] = useState(false);
 
-  // Jump to Date Modal state
+  // Retrieve last entered units across entries
+  const lastEntryWithUnits = [...existingEntries].reverse().find((e) => e.am || e.pm || e.extra);
+  const [amUnits, setAmUnits] = useState(lastEntryWithUnits?.am || '');
+  const [pmUnits, setPmUnits] = useState(lastEntryWithUnits?.pm || '');
+  const [extraUnits, setExtraUnits] = useState('');
+
+  // Date jump modal
   const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
   const [jumpDateInput, setJumpDateInput] = useState(
     new Date().toISOString().split('T')[0]
   );
 
-  // Date Shift Helpers
   const shiftDay = (days) => {
     const next = new Date(selectedDate);
     next.setDate(next.getDate() + days);
@@ -47,10 +52,20 @@ export default function NewEntryView({ onSave, onCancel }) {
     setIsJumpModalOpen(false);
   };
 
-  // On-screen Keypad Handler
   const handleKeyPress = (key) => {
+    if (isExtremeLow || isExtremeHigh) {
+      setIsExtremeLow(false);
+      setIsExtremeHigh(false);
+    }
+
     let currentVal =
-      focusField === 'reading' ? reading : focusField === 'am' ? amUnits : pmUnits;
+      focusField === 'reading'
+        ? reading
+        : focusField === 'am'
+        ? amUnits
+        : focusField === 'pm'
+        ? pmUnits
+        : extraUnits;
 
     let nextVal = currentVal;
     if (key === 'del') {
@@ -65,29 +80,68 @@ export default function NewEntryView({ onSave, onCancel }) {
 
     if (focusField === 'reading') setReading(nextVal);
     else if (focusField === 'am') setAmUnits(nextVal);
-    else setPmUnits(nextVal);
+    else if (focusField === 'pm') setPmUnits(nextVal);
+    else setExtraUnits(nextVal);
   };
 
-  const status = getReadingStatus(reading);
-  const canSave = reading.length > 0;
+  const handleSetExtremeLow = () => {
+    setIsExtremeLow(true);
+    setIsExtremeHigh(false);
+    setReading('45');
+  };
+
+  const handleSetExtremeHigh = () => {
+    setIsExtremeHigh(true);
+    setIsExtremeLow(false);
+    setReading('260');
+  };
+
+  const status = getReadingStatus(reading, isExtremeLow, isExtremeHigh);
+  const canSave = reading.length > 0 || isExtremeLow || isExtremeHigh;
 
   const handleSave = () => {
     if (!canSave) return;
-    const slotDef = SLOTS.find((s) => s.name === selectedSlot);
-    onSave({
-      id: Date.now().toString(),
-      date: selectedDate.toISOString().split('T')[0],
-      slot: selectedSlot === 'Custom' ? customLabel || 'Custom' : selectedSlot,
-      time: selectedSlot === 'Custom' ? customTime : slotDef?.time,
-      reading: parseFloat(reading),
-      am: amUnits,
-      pm: pmUnits,
-    });
+    const dateStr = selectedDate.toISOString().split('T')[0];
+    const finalSlot = selectedSlot === 'Custom' ? customLabel || 'Custom' : selectedSlot;
+
+    // Check for duplicate entry for same date and slot
+    const existingIndex = existingEntries.findIndex(
+      (e) => e.date === dateStr && e.slot === finalSlot
+    );
+
+    const performSave = () => {
+      onSave({
+        id: existingIndex >= 0 ? existingEntries[existingIndex].id : Date.now().toString(),
+        date: dateStr,
+        slot: finalSlot,
+        time: selectedSlot === 'Custom' ? customTime : '',
+        reading: isExtremeLow || isExtremeHigh ? '' : parseFloat(reading),
+        isExtremeLow,
+        isExtremeHigh,
+        am: amUnits,
+        pm: pmUnits,
+        extra: extraUnits,
+        hidden: false,
+      });
+    };
+
+    if (existingIndex >= 0) {
+      Alert.alert(
+        'Duplicate Entry',
+        `A log for ${finalSlot} on this date already exists. Do you want to replace it?`,
+        [
+          { text: 'Discard', style: 'cancel' },
+          { text: 'Replace', style: 'destructive', onPress: performSave },
+        ]
+      );
+    } else {
+      performSave();
+    }
   };
 
   return (
     <View style={styles.container}>
-      {/* Top Header */}
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.closeBtn} onPress={onCancel}>
           <Text style={styles.closeBtnText}>✕</Text>
@@ -96,7 +150,7 @@ export default function NewEntryView({ onSave, onCancel }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Date Selector with Jump Option */}
+        {/* Date Card */}
         <View style={styles.dateCard}>
           <TouchableOpacity style={styles.arrowBtn} onPress={() => shiftDay(-1)}>
             <Text style={styles.arrowText}>‹</Text>
@@ -118,8 +172,8 @@ export default function NewEntryView({ onSave, onCancel }) {
           </TouchableOpacity>
         </View>
 
-        {/* Time Slots Grid */}
-        <Text style={styles.sectionHeader}>TIME</Text>
+        {/* Time Slot Selector */}
+        <Text style={styles.sectionHeader}>TIME SLOT</Text>
         <View style={styles.slotsGrid}>
           {SLOTS.map((slot) => {
             const isSelected = selectedSlot === slot.name;
@@ -132,15 +186,12 @@ export default function NewEntryView({ onSave, onCancel }) {
                 <Text style={[styles.slotName, isSelected && styles.slotNameActive]}>
                   {slot.name}
                 </Text>
-                <Text style={[styles.slotTime, isSelected && styles.slotTimeActive]}>
-                  {slot.name === 'Custom' && isSelected ? customTime : slot.time}
-                </Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        {/* Custom Slot Sub-fields */}
+        {/* Custom Slot Input */}
         {selectedSlot === 'Custom' && (
           <View style={styles.customContainer}>
             <Text style={styles.sectionCaption}>LABEL THIS READING</Text>
@@ -162,7 +213,7 @@ export default function NewEntryView({ onSave, onCancel }) {
           </View>
         )}
 
-        {/* Reading Card */}
+        {/* Sugar Reading Field */}
         <Text style={styles.sectionHeader}>READING</Text>
         <TouchableOpacity
           style={[
@@ -173,7 +224,7 @@ export default function NewEntryView({ onSave, onCancel }) {
         >
           <View style={styles.readingValRow}>
             <Text style={[styles.readingValue, !reading && styles.placeholderValue]}>
-              {reading || '––'}
+              {isExtremeLow ? '<50' : isExtremeHigh ? '>250' : reading || '––'}
             </Text>
             <Text style={styles.readingUnit}>mg/dL</Text>
           </View>
@@ -184,14 +235,42 @@ export default function NewEntryView({ onSave, onCancel }) {
           </View>
         </TouchableOpacity>
 
-        {/* Insulin Units */}
+        {/* Extreme High/Low Shortcut Buttons */}
+        <View style={styles.extremeRow}>
+          <TouchableOpacity
+            style={[styles.extremeBtn, isExtremeLow && styles.extremeBtnActiveLow]}
+            onPress={handleSetExtremeLow}
+          >
+            <Text
+              style={[
+                styles.extremeBtnText,
+                isExtremeLow && styles.extremeBtnTextActive,
+              ]}
+            >
+              ⚠ Extreme Low (&lt;50)
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.extremeBtn, isExtremeHigh && styles.extremeBtnActiveHigh]}
+            onPress={handleSetExtremeHigh}
+          >
+            <Text
+              style={[
+                styles.extremeBtnText,
+                isExtremeHigh && styles.extremeBtnTextActive,
+              ]}
+            >
+              ⚠ Extreme High (&gt;250)
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Insulin Units Input Grid */}
         <Text style={styles.sectionHeader}>INSULIN UNITS</Text>
         <View style={styles.insulinGrid}>
           <TouchableOpacity
-            style={[
-              styles.doseCard,
-              focusField === 'am' && styles.activeCardBorder,
-            ]}
+            style={[styles.doseCard, focusField === 'am' && styles.activeCardBorder]}
             onPress={() => setFocusField('am')}
           >
             <View style={styles.doseHeader}>
@@ -207,10 +286,7 @@ export default function NewEntryView({ onSave, onCancel }) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[
-              styles.doseCard,
-              focusField === 'pm' && styles.activeCardBorder,
-            ]}
+            style={[styles.doseCard, focusField === 'pm' && styles.activeCardBorder]}
             onPress={() => setFocusField('pm')}
           >
             <View style={styles.doseHeader}>
@@ -224,18 +300,41 @@ export default function NewEntryView({ onSave, onCancel }) {
               <Text style={styles.doseUnit}>u</Text>
             </View>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.doseCard, focusField === 'extra' && styles.activeCardBorder]}
+            onPress={() => setFocusField('extra')}
+          >
+            <View style={styles.doseHeader}>
+              <View style={[styles.doseDot, { backgroundColor: '#0D6E5E' }]} />
+              <Text style={styles.doseLabel}>Extra</Text>
+            </View>
+            <View style={styles.doseValRow}>
+              <Text style={[styles.doseValue, !extraUnits && styles.placeholderValue]}>
+                {extraUnits || '––'}
+              </Text>
+              <Text style={styles.doseUnit}>u</Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         <Text style={styles.helperText}>
-          Tap a field, then use the keypad. Leave a dose empty if you skipped it.
+          Units auto-fill from previous entry. Leave empty if skipped.
         </Text>
       </ScrollView>
 
-      {/* Embedded Material 3 Numeric Keypad */}
+      {/* Keypad */}
       <View style={styles.keypadWrapper}>
         <View style={styles.keypadIndicator}>
           <Text style={styles.keypadTypingText}>
-            Typing into: {focusField === 'reading' ? 'Reading' : focusField === 'am' ? 'Morning units' : 'Evening units'}
+            Typing into:{' '}
+            {focusField === 'reading'
+              ? 'Reading'
+              : focusField === 'am'
+              ? 'Morning units'
+              : focusField === 'pm'
+              ? 'Evening units'
+              : 'Extra units'}
           </Text>
           <Text style={styles.keypadUnitHint}>
             {focusField === 'reading' ? 'mg/dL' : 'units'}
@@ -267,7 +366,7 @@ export default function NewEntryView({ onSave, onCancel }) {
         </TouchableOpacity>
       </View>
 
-      {/* Jump to Date Modal */}
+      {/* Jump Modal */}
       <Modal visible={isJumpModalOpen} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -302,7 +401,14 @@ export default function NewEntryView({ onSave, onCancel }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FBF9F4' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
   closeBtn: { width: 40, height: 40, borderRadius: 13, backgroundColor: '#F0EDE5', alignItems: 'center', justifyContent: 'center' },
   closeBtnText: { fontSize: 18, fontWeight: '600', color: '#3D4C47' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#14201C' },
@@ -315,12 +421,10 @@ const styles = StyleSheet.create({
   dateText: { fontSize: 16, fontWeight: '700', color: '#14201C', marginTop: 2 },
   sectionHeader: { fontSize: 11, fontWeight: '700', letterSpacing: 1.2, color: '#8B9A94', marginTop: 14, marginBottom: 8 },
   slotsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  slotChip: { width: '48.5%', backgroundColor: '#fff', borderWidth: 1, borderColor: 'rgba(20,32,28,0.08)', borderRadius: 14, padding: 12 },
+  slotChip: { width: '48.5%', backgroundColor: '#fff', borderWidth: 1, borderColor: 'rgba(20,32,28,0.08)', borderRadius: 14, padding: 14, alignItems: 'center' },
   slotChipActive: { backgroundColor: '#0D6E5E', borderColor: '#0D6E5E' },
   slotName: { fontSize: 13.5, fontWeight: '700', color: '#14201C' },
   slotNameActive: { color: '#EAF6F2' },
-  slotTime: { fontSize: 11, fontWeight: '600', color: '#8B9A94', marginTop: 2 },
-  slotTimeActive: { color: 'rgba(234,246,242,0.72)' },
   customContainer: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#0D6E5E', borderRadius: 14, padding: 12, marginTop: 8 },
   customInput: { fontSize: 15, fontWeight: '600', borderBottomWidth: 1.5, borderBottomColor: 'rgba(20,32,28,0.1)', paddingVertical: 6 },
   customTimeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 10 },
@@ -333,26 +437,32 @@ const styles = StyleSheet.create({
   readingUnit: { fontSize: 13, fontWeight: '700', color: '#8B9A94' },
   statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   statusText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  insulinGrid: { flexDirection: 'row', gap: 10 },
-  doseCard: { flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 12, borderWidth: 1.5, borderColor: 'rgba(20,32,28,0.08)' },
-  doseHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  extremeRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  extremeBtn: { flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: 'rgba(20,32,28,0.1)', borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+  extremeBtnActiveLow: { backgroundColor: '#FFE4E6', borderColor: '#881337' },
+  extremeBtnActiveHigh: { backgroundColor: '#FEE2E2', borderColor: '#7F1D1D' },
+  extremeBtnText: { fontSize: 12, fontWeight: '700', color: '#6B7A75' },
+  extremeBtnTextActive: { color: '#7F1D1D' },
+  insulinGrid: { flexDirection: 'row', gap: 8 },
+  doseCard: { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 10, borderWidth: 1.5, borderColor: 'rgba(20,32,28,0.08)' },
+  doseHeader: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   doseDot: { width: 7, height: 7, borderRadius: 4 },
-  doseLabel: { fontSize: 11.5, fontWeight: '700', color: '#3D4C47' },
-  doseValRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4, marginTop: 6 },
-  doseValue: { fontSize: 24, fontWeight: '800', color: '#14201C' },
-  doseUnit: { fontSize: 12, fontWeight: '700', color: '#8B9A94' },
+  doseLabel: { fontSize: 11, fontWeight: '700', color: '#3D4C47' },
+  doseValRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3, marginTop: 4 },
+  doseValue: { fontSize: 20, fontWeight: '800', color: '#14201C' },
+  doseUnit: { fontSize: 11, fontWeight: '700', color: '#8B9A94' },
   activeCardBorder: { borderColor: '#0D6E5E' },
-  helperText: { fontSize: 11.5, color: '#8B9A94', marginTop: 8, textAlign: 'center' },
+  helperText: { fontSize: 11, color: '#8B9A94', marginTop: 8, textAlign: 'center' },
   keypadWrapper: { backgroundColor: '#F2EFE8', borderTopWidth: 1, borderTopColor: 'rgba(20,32,28,0.08)', padding: 10 },
   keypadIndicator: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 6, marginBottom: 8 },
   keypadTypingText: { fontSize: 11.5, fontWeight: '700', color: '#3D4C47' },
   keypadUnitHint: { fontSize: 11, fontWeight: '600', color: '#8B9A94' },
   keypadGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'space-between' },
-  keyBtn: { width: '31.5%', height: 48, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(20,32,28,0.08)', alignItems: 'center', justifyContent: 'center' },
+  keyBtn: { width: '31.5%', height: 46, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(20,32,28,0.08)', alignItems: 'center', justifyContent: 'center' },
   keyText: { fontSize: 20, fontWeight: '700', color: '#14201C' },
   delKeyBtn: { backgroundColor: '#E4E0D6' },
   delKeyText: { fontSize: 18 },
-  saveBtn: { height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  saveBtn: { height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   saveBtnActive: { backgroundColor: '#0D6E5E' },
   saveBtnDisabled: { backgroundColor: '#E4E0D6' },
   saveText: { fontSize: 15, fontWeight: '700' },
