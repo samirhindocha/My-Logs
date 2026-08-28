@@ -1,6 +1,8 @@
 import { Alert, Platform } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
+import { buildDocxBytes } from './docxBuilder';
 
 const formatShortDate = (dateStr) => {
   if (!dateStr) return '';
@@ -41,9 +43,9 @@ const buildExportMatrix = (entries, startDate, endDate) => {
     if (item.extra) row.extra = item.extra;
 
     const valDisplay = item.isExtremeLow
-      ? 'Ext Low (<50)'
+      ? `Ext Low (${item.reading})`
       : item.isExtremeHigh
-      ? 'Ext High (>250)'
+      ? `Ext High (${item.reading})`
       : item.reading
       ? String(item.reading)
       : '';
@@ -162,49 +164,44 @@ export const exportLogsToPDF = async (entries, startDate, endDate) => {
   }
 };
 
-export const exportLogsToDOCX = async (entries, startDate, endDate) => {
-  const rows = buildExportMatrix(entries, startDate, endDate);
-  const html = buildTableHtml(rows);
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-  const docContent = `
-    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head>
-        <meta charset="utf-8">
-        <title>Glucose Logs Export</title>
-        <!--[if gte mso 9]>
-        <xml>
-          <w:WordDocument>
-            <w:View>Print</w:View>
-            <w:Zoom>100</w:Zoom>
-            <w:DoNotOptimizeForBrowser/>
-          </w:WordDocument>
-        </xml>
-        <![endif]-->
-      </head>
-      <body>
-        ${html}
-      </body>
-    </html>
-  `;
+export const exportLogsToDOCX = async (entries, startDate, endDate) => {
+  const matrix = buildExportMatrix(entries, startDate, endDate);
+  const headers = ['Date', 'Fasting', 'Before Lunch', 'After Lunch', 'Before Dinner', 'After Dinner', '3 AM', 'Other', 'Unit'];
+  const rows = matrix.map((r) => [
+    r.date,
+    r.fasting,
+    r.beforeLunch,
+    r.afterLunch,
+    r.beforeDinner,
+    r.afterDinner,
+    r.threeAm,
+    r.otherText,
+    r.unitText,
+  ]);
+  const fileName = `Glucose_Logs_${startDate}_to_${endDate}.docx`;
 
   try {
+    const bytes = buildDocxBytes({ title: 'Glucose Logs Export', headers, rows });
+
     if (Platform.OS === 'web') {
-      const blob = new Blob(['\ufeff' + docContent], {
-        type: 'application/msword;charset=utf-8',
-      });
+      const blob = new Blob([bytes], { type: DOCX_MIME });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Glucose_Logs_${startDate}_to_${endDate}.doc`;
+      a.download = fileName;
       a.click();
       URL.revokeObjectURL(url);
       return true;
     }
 
-    const { uri } = await Print.printToFileAsync({ html: docContent });
-    await Sharing.shareAsync(uri, {
-      UTI: 'com.microsoft.word.doc',
-      mimeType: 'application/msword',
+    const file = new File(Paths.cache, fileName);
+    if (file.exists) file.delete();
+    file.write(bytes);
+    await Sharing.shareAsync(file.uri, {
+      UTI: 'org.openxmlformats.wordprocessingml.document',
+      mimeType: DOCX_MIME,
     });
     return true;
   } catch (error) {

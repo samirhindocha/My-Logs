@@ -7,9 +7,10 @@ import {
   TouchableOpacity,
   Modal,
   Alert,
+  Platform,
 } from 'react-native';
 import * as Sharing from 'expo-sharing';
-import * as Print from 'expo-print';
+import { File, Paths } from 'expo-file-system';
 import { SLOTS } from '../constants/theme';
 import { formatDateHeader, getReadingStatus } from '../utils/storage';
 
@@ -57,8 +58,6 @@ export default function LogbookView({
     const getVal = (slotName) => {
       const match = dayItems.find((e) => e.slot === slotName);
       if (!match) return '—';
-      if (match.isExtremeLow) return '<50';
-      if (match.isExtremeHigh) return '>250';
       return match.reading || '—';
     };
 
@@ -84,11 +83,24 @@ Insulin
 Before Breakfast: ${amDose}
 Before Dinner: ${pmDose}`;
 
+    const fileName = `Glucose_Log_${dateStr}.txt`;
+
     try {
-      const { uri } = await Print.printToFileAsync({
-        html: `<html><body style="font-family:monospace;white-space:pre-wrap;padding:30px;font-size:16px;">${reportText}</body></html>`,
-      });
-      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+      if (Platform.OS === 'web') {
+        const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      const file = new File(Paths.cache, fileName);
+      if (file.exists) file.delete();
+      file.write(reportText);
+      await Sharing.shareAsync(file.uri, { UTI: 'public.plain-text', mimeType: 'text/plain' });
     } catch (e) {
       Alert.alert('Export Day Report', reportText);
     }
@@ -168,11 +180,7 @@ Before Dinner: ${pmDose}`;
                   if (item.pm) doseMeta.push(`${item.pm}u PM`);
                   if (item.extra) doseMeta.push(`${item.extra}u Ext`);
 
-                  const displayVal = item.isExtremeLow
-                    ? '<50'
-                    : item.isExtremeHigh
-                    ? '>250'
-                    : item.reading;
+                  const displayVal = item.reading;
 
                   return (
                     <View key={item.id} style={[styles.card, item.hidden && styles.cardHidden]}>
