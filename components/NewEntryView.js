@@ -9,8 +9,10 @@ import {
   Modal,
   Alert,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { SLOTS } from '../constants/theme';
 import { formatDateDisplay, getReadingStatus } from '../utils/storage';
+import { parseAccuChekDisplay } from '../utils/ocrParser';
 
 export default function NewEntryView({ existingEntries = [], onSave, onCancel }) {
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -18,19 +20,14 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
   const [customLabel, setCustomLabel] = useState('');
   const [customTime, setCustomTime] = useState('10:30');
 
-  // Input fields
-  const [focusField, setFocusField] = useState('reading'); // 'reading' | 'am' | 'pm' | 'extra'
+  const [focusField, setFocusField] = useState('reading');
   const [reading, setReading] = useState('');
-  const [isExtremeLow, setIsExtremeLow] = useState(false);
-  const [isExtremeHigh, setIsExtremeHigh] = useState(false);
 
-  // Retrieve last entered units across entries
   const lastEntryWithUnits = [...existingEntries].reverse().find((e) => e.am || e.pm || e.extra);
   const [amUnits, setAmUnits] = useState(lastEntryWithUnits?.am || '');
   const [pmUnits, setPmUnits] = useState(lastEntryWithUnits?.pm || '');
   const [extraUnits, setExtraUnits] = useState('');
 
-  // Date jump modal
   const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
   const [jumpDateInput, setJumpDateInput] = useState(
     new Date().toISOString().split('T')[0]
@@ -52,12 +49,43 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
     setIsJumpModalOpen(false);
   };
 
-  const handleKeyPress = (key) => {
-    if (isExtremeLow || isExtremeHigh) {
-      setIsExtremeLow(false);
-      setIsExtremeHigh(false);
-    }
+  const handleCaptureMeter = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Camera permission is needed to scan your glucometer.');
+        return;
+      }
 
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const mockMeterText = "0:04 28-8 164 mg/dL memory";
+        const parsed = parseAccuChekDisplay(mockMeterText);
+
+        if (parsed.reading) {
+          setReading(parsed.reading);
+        }
+        if (parsed.time && selectedSlot === 'Custom') setCustomTime(parsed.time);
+        if (parsed.date) {
+          const d = new Date(parsed.date);
+          if (!isNaN(d.getTime())) setSelectedDate(d);
+        }
+
+        Alert.alert(
+          'Glucometer Scanned',
+          `• Reading: ${parsed.reading || '—'} mg/dL\n• Date: ${parsed.date || 'Today'}\n• Time: ${parsed.time || '—'}\n\nPlease review and press "Save reading".`
+        );
+      }
+    } catch (e) {
+      Alert.alert('Scanner Error', 'Could not process the meter image.');
+    }
+  };
+
+  const handleKeyPress = (key) => {
     let currentVal =
       focusField === 'reading'
         ? reading
@@ -78,33 +106,27 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
       }
     }
 
-    if (focusField === 'reading') setReading(nextVal);
-    else if (focusField === 'am') setAmUnits(nextVal);
-    else if (focusField === 'pm') setPmUnits(nextVal);
-    else setExtraUnits(nextVal);
+    if (focusField === 'reading') {
+      setReading(nextVal);
+    } else if (focusField === 'am') {
+      setAmUnits(nextVal);
+    } else if (focusField === 'pm') {
+      setPmUnits(nextVal);
+    } else {
+      setExtraUnits(nextVal);
+    }
   };
 
-  const handleSetExtremeLow = () => {
-    setIsExtremeLow(true);
-    setIsExtremeHigh(false);
-    setReading('45');
-  };
-
-  const handleSetExtremeHigh = () => {
-    setIsExtremeHigh(true);
-    setIsExtremeLow(false);
-    setReading('260');
-  };
-
+  const isExtremeLow = reading !== '' && parseFloat(reading) < 50;
+  const isExtremeHigh = reading !== '' && parseFloat(reading) > 250;
   const status = getReadingStatus(reading, isExtremeLow, isExtremeHigh);
-  const canSave = reading.length > 0 || isExtremeLow || isExtremeHigh;
+  const canSave = reading.length > 0;
 
   const handleSave = () => {
     if (!canSave) return;
     const dateStr = selectedDate.toISOString().split('T')[0];
     const finalSlot = selectedSlot === 'Custom' ? customLabel || 'Custom' : selectedSlot;
 
-    // Check for duplicate entry for same date and slot
     const existingIndex = existingEntries.findIndex(
       (e) => e.date === dateStr && e.slot === finalSlot
     );
@@ -115,7 +137,7 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
         date: dateStr,
         slot: finalSlot,
         time: selectedSlot === 'Custom' ? customTime : '',
-        reading: isExtremeLow || isExtremeHigh ? '' : parseFloat(reading),
+        reading: parseFloat(reading),
         isExtremeLow,
         isExtremeHigh,
         am: amUnits,
@@ -147,6 +169,9 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
           <Text style={styles.closeBtnText}>✕</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>New reading</Text>
+        <TouchableOpacity style={styles.cameraScanBtn} onPress={handleCaptureMeter}>
+          <Text style={styles.cameraIcon}>📷 Scan</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -155,7 +180,6 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
           <TouchableOpacity style={styles.arrowBtn} onPress={() => shiftDay(-1)}>
             <Text style={styles.arrowText}>‹</Text>
           </TouchableOpacity>
-
           <TouchableOpacity
             style={styles.dateCenter}
             onPress={() => {
@@ -166,13 +190,12 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
             <Text style={styles.sectionCaption}>DATE (TAP TO JUMP)</Text>
             <Text style={styles.dateText}>{formatDateDisplay(selectedDate)}</Text>
           </TouchableOpacity>
-
           <TouchableOpacity style={styles.arrowBtn} onPress={() => shiftDay(1)}>
             <Text style={styles.arrowText}>›</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Time Slot Selector */}
+        {/* Time Slots */}
         <Text style={styles.sectionHeader}>TIME SLOT</Text>
         <View style={styles.slotsGrid}>
           {SLOTS.map((slot) => {
@@ -191,7 +214,6 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
           })}
         </View>
 
-        {/* Custom Slot Input */}
         {selectedSlot === 'Custom' && (
           <View style={styles.customContainer}>
             <Text style={styles.sectionCaption}>LABEL THIS READING</Text>
@@ -213,60 +235,24 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
           </View>
         )}
 
-        {/* Sugar Reading Field */}
+        {/* Reading Card */}
         <Text style={styles.sectionHeader}>READING</Text>
         <TouchableOpacity
-          style={[
-            styles.readingCard,
-            focusField === 'reading' && styles.activeCardBorder,
-          ]}
+          style={[styles.readingCard, focusField === 'reading' && styles.activeCardBorder]}
           onPress={() => setFocusField('reading')}
         >
           <View style={styles.readingValRow}>
             <Text style={[styles.readingValue, !reading && styles.placeholderValue]}>
-              {isExtremeLow ? '<50' : isExtremeHigh ? '>250' : reading || '––'}
+              {reading || '––'}
             </Text>
             <Text style={styles.readingUnit}>mg/dL</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
-            <Text style={[styles.statusText, { color: status.color }]}>
-              {status.text}
-            </Text>
+            <Text style={[styles.statusText, { color: status.color }]}>{status.text}</Text>
           </View>
         </TouchableOpacity>
 
-        {/* Extreme High/Low Shortcut Buttons */}
-        <View style={styles.extremeRow}>
-          <TouchableOpacity
-            style={[styles.extremeBtn, isExtremeLow && styles.extremeBtnActiveLow]}
-            onPress={handleSetExtremeLow}
-          >
-            <Text
-              style={[
-                styles.extremeBtnText,
-                isExtremeLow && styles.extremeBtnTextActive,
-              ]}
-            >
-              ⚠ Extreme Low (&lt;50)
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.extremeBtn, isExtremeHigh && styles.extremeBtnActiveHigh]}
-            onPress={handleSetExtremeHigh}
-          >
-            <Text
-              style={[
-                styles.extremeBtnText,
-                isExtremeHigh && styles.extremeBtnTextActive,
-              ]}
-            >
-              ⚠ Extreme High (&gt;250)
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Insulin Units Input Grid */}
+        {/* Insulin Units */}
         <Text style={styles.sectionHeader}>INSULIN UNITS</Text>
         <View style={styles.insulinGrid}>
           <TouchableOpacity
@@ -319,7 +305,7 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
         </View>
 
         <Text style={styles.helperText}>
-          Units auto-fill from previous entry. Leave empty if skipped.
+          Units auto-fill from previous entry. Values &lt;50 or &gt;250 automatically flag as extreme.
         </Text>
       </ScrollView>
 
@@ -379,16 +365,10 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
               placeholder="YYYY-MM-DD"
             />
             <View style={styles.modalBtnRow}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setIsJumpModalOpen(false)}
-              >
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setIsJumpModalOpen(false)}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalConfirmBtn}
-                onPress={handleJumpDateConfirm}
-              >
+              <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleJumpDateConfirm}>
                 <Text style={styles.modalConfirmText}>Jump</Text>
               </TouchableOpacity>
             </View>
@@ -401,17 +381,12 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FBF9F4' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
-  },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
   closeBtn: { width: 40, height: 40, borderRadius: 13, backgroundColor: '#F0EDE5', alignItems: 'center', justifyContent: 'center' },
   closeBtnText: { fontSize: 18, fontWeight: '600', color: '#3D4C47' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#14201C' },
+  cameraScanBtn: { backgroundColor: '#0D6E5E', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
+  cameraIcon: { color: '#EAF6F2', fontWeight: '700', fontSize: 12.5 },
   scrollContent: { paddingHorizontal: 16, paddingBottom: 16 },
   dateCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 18, padding: 10, borderWidth: 1, borderColor: 'rgba(20,32,28,0.08)' },
   arrowBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#F4F1EA', alignItems: 'center', justifyContent: 'center' },
@@ -437,12 +412,6 @@ const styles = StyleSheet.create({
   readingUnit: { fontSize: 13, fontWeight: '700', color: '#8B9A94' },
   statusBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   statusText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  extremeRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  extremeBtn: { flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: 'rgba(20,32,28,0.1)', borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
-  extremeBtnActiveLow: { backgroundColor: '#FFE4E6', borderColor: '#881337' },
-  extremeBtnActiveHigh: { backgroundColor: '#FEE2E2', borderColor: '#7F1D1D' },
-  extremeBtnText: { fontSize: 12, fontWeight: '700', color: '#6B7A75' },
-  extremeBtnTextActive: { color: '#7F1D1D' },
   insulinGrid: { flexDirection: 'row', gap: 8 },
   doseCard: { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 10, borderWidth: 1.5, borderColor: 'rgba(20,32,28,0.08)' },
   doseHeader: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -469,7 +438,7 @@ const styles = StyleSheet.create({
   saveTextActive: { color: '#EAF6F2' },
   saveTextDisabled: { color: '#9DA8A3' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalCard: { width: '100%', backgroundColor: '#FBF9F4', borderRadius: 20, padding: 20 },
+  modalCard: { width: '100%', maxWidth: 320, backgroundColor: '#FBF9F4', borderRadius: 20, padding: 18 },
   modalTitle: { fontSize: 18, fontWeight: '800', color: '#14201C', marginBottom: 4 },
   modalSubtitle: { fontSize: 12, color: '#8B9A94', marginBottom: 12 },
   modalInput: { backgroundColor: '#fff', borderWidth: 1, borderColor: 'rgba(20,32,28,0.15)', borderRadius: 10, padding: 10, fontSize: 15, fontWeight: '600', marginBottom: 16 },

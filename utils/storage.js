@@ -53,12 +53,31 @@ export const formatDateDisplay = (dateObj) => {
   return isToday ? `Today · ${formatted}` : formatted;
 };
 
+// Automatic numerical + boolean flag threshold evaluation
 export const getReadingStatus = (value, isExtremeLow, isExtremeHigh) => {
-  if (isExtremeLow) return { text: 'EXTREME LOW', color: '#881337', bg: '#FFE4E6' };
-  if (isExtremeHigh) return { text: 'EXTREME HIGH', color: '#7F1D1D', bg: '#FEE2E2' };
-  if (!value || isNaN(value)) return { text: 'ENTER A VALUE', color: '#8B9A94', bg: '#F0EDE5' };
+  if (isExtremeLow) {
+    return { text: 'EXTREME LOW', color: '#881337', bg: '#FFE4E6' };
+  }
+  if (isExtremeHigh) {
+    return { text: 'EXTREME HIGH', color: '#7F1D1D', bg: '#FEE2E2' };
+  }
+  if (!value || isNaN(value)) {
+    return { text: 'ENTER A VALUE', color: '#8B9A94', bg: '#F0EDE5' };
+  }
+
   const num = parseFloat(value);
-  if (num < 70) return { text: 'LOW', color: '#B4741C', bg: '#FBEBD3' };
-  if (num > 140) return { text: 'HIGH', color: '#B3402E', bg: '#FAE2DD' };
+  if (num < 50) {
+    return { text: 'EXTREME LOW', color: '#881337', bg: '#FFE4E6' };
+  }
+  if (num < 70) {
+    return { text: 'LOW', color: '#B4741C', bg: '#FBEBD3' };
+  }
+  if (num > 250) {
+    return { text: 'EXTREME HIGH', color: '#7F1D1D', bg: '#FEE2E2' };
+  }
+  if (num > 140) {
+    return { text: 'HIGH', color: '#B3402E', bg: '#FAE2DD' };
+  }
+
   return { text: 'IN RANGE', color: '#0D6E5E', bg: '#DCEDE8' };
 };

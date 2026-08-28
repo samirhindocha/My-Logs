@@ -6,13 +6,17 @@ import {
   ScrollView,
   TouchableOpacity,
   Modal,
+  Alert,
 } from 'react-native';
+import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
 import { SLOTS } from '../constants/theme';
 import { formatDateHeader, getReadingStatus } from '../utils/storage';
 
 export default function LogbookView({
   entries = [],
   onOpenExport,
+  onOpenConfig,
   onGoTrends,
   onOpenEntry,
   onDeleteEntry,
@@ -28,7 +32,7 @@ export default function LogbookView({
   });
   const dateKeys = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
 
-  // Dynamic slot average calculation
+  // Dynamic slot average
   const slotMatches = entries.filter(
     (e) => e.slot === selectedAvgSlot && e.reading && !e.isExtremeLow && !e.isExtremeHigh
   );
@@ -36,38 +40,82 @@ export default function LogbookView({
     ? Math.round(slotMatches.reduce((acc, c) => acc + Number(c.reading), 0) / slotMatches.length)
     : '—';
 
-  // Units Logged Today
+  // Units today
   const todayStr = new Date().toISOString().split('T')[0];
   const todayEntries = entries.filter((e) => e.date === todayStr);
   const totalUnitsToday = todayEntries.reduce(
-    (acc, curr) =>
-      acc +
-      (Number(curr.am) || 0) +
-      (Number(curr.pm) || 0) +
-      (Number(curr.extra) || 0),
+    (acc, curr) => acc + (Number(curr.am) || 0) + (Number(curr.pm) || 0) + (Number(curr.extra) || 0),
     0
   );
 
+  // Single Day Plain Text Export
+  const handleExportSingleDay = async (dateStr) => {
+    const dayItems = byDate[dateStr] || [];
+    const parts = dateStr.split('-');
+    const formattedDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+
+    const getVal = (slotName) => {
+      const match = dayItems.find((e) => e.slot === slotName);
+      if (!match) return '—';
+      if (match.isExtremeLow) return '<50';
+      if (match.isExtremeHigh) return '>250';
+      return match.reading || '—';
+    };
+
+    // Extract insulin doses
+    let amDose = '—';
+    let pmDose = '—';
+    dayItems.forEach((e) => {
+      if (e.am) amDose = e.am;
+      if (e.pm) pmDose = e.pm;
+    });
+
+    const reportText =
+`Date - ${formattedDate}
+
+Fasting: ${getVal('Fasting')}
+Before Lunch: ${getVal('Before Lunch')}
+After Lunch 2hr: ${getVal('After Lunch 2hr')}
+Before Dinner: ${getVal('Before Dinner')}
+After Dinner 2hr: ${getVal('After Dinner')}
+3 AM: ${getVal('3 AM')}
+
+Insulin  
+Before Breakfast: ${amDose}
+Before Dinner: ${pmDose}`;
+
+    try {
+      const { uri } = await Print.printToFileAsync({
+        html: `<html><body style="font-family:monospace;white-space:pre-wrap;padding:30px;font-size:16px;">${reportText}</body></html>`,
+      });
+      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+    } catch (e) {
+      Alert.alert('Export Day Report', reportText);
+    }
+  };
+
   return (
     <View style={styles.flexOne}>
+      {/* Top Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.appSubtitle}>LOGBOOK</Text>
           <Text style={styles.appTitle}>This week</Text>
         </View>
-        <TouchableOpacity style={styles.exportBtn} onPress={onOpenExport}>
-          <Text style={styles.exportIcon}>⤓</Text>
-          <Text style={styles.exportBtnText}>Export</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.configBtn} onPress={onOpenConfig}>
+            <Text style={styles.configIcon}>⚙️</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.exportBtn} onPress={onOpenExport}>
+            <Text style={styles.exportIcon}>⤓</Text>
+            <Text style={styles.exportBtnText}>Export</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Summary Cards */}
       <View style={styles.statsContainer}>
-        {/* Metric Selector Card */}
-        <TouchableOpacity
-          style={styles.statBoxPrimary}
-          onPress={() => setPickerOpen(true)}
-        >
+        <TouchableOpacity style={styles.statBoxPrimary} onPress={() => setPickerOpen(true)}>
           <View style={styles.metricHeaderRow}>
             <Text style={styles.statLabelPrimary}>Avg {selectedAvgSlot}</Text>
             <Text style={styles.chevronIcon}>▾</Text>
@@ -89,7 +137,7 @@ export default function LogbookView({
         </View>
       </View>
 
-      {/* Log Entries */}
+      {/* Day Groups List */}
       <ScrollView contentContainerStyle={styles.listContent}>
         {entries.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -99,23 +147,17 @@ export default function LogbookView({
         ) : (
           dateKeys.map((dateStr) => {
             const items = byDate[dateStr];
-            const totalDayUnits = items.reduce(
-              (acc, curr) =>
-                acc +
-                (Number(curr.am) || 0) +
-                (Number(curr.pm) || 0) +
-                (Number(curr.extra) || 0),
-              0
-            );
-
             return (
               <View key={dateStr} style={styles.dateGroup}>
                 <View style={styles.dateGroupHeader}>
                   <Text style={styles.dateGroupTitle}>{formatDateHeader(dateStr)}</Text>
                   <View style={styles.divider} />
-                  <Text style={styles.dateGroupCount}>
-                    {totalDayUnits > 0 ? `${totalDayUnits} units` : 'no dose logged'}
-                  </Text>
+                  <TouchableOpacity
+                    style={styles.dayExportBtn}
+                    onPress={() => handleExportSingleDay(dateStr)}
+                  >
+                    <Text style={styles.dayExportText}>📄 Export Day</Text>
+                  </TouchableOpacity>
                 </View>
 
                 {items.map((item) => {
@@ -133,10 +175,7 @@ export default function LogbookView({
                     : item.reading;
 
                   return (
-                    <View
-                      key={item.id}
-                      style={[styles.card, item.hidden && styles.cardHidden]}
-                    >
+                    <View key={item.id} style={[styles.card, item.hidden && styles.cardHidden]}>
                       <View style={[styles.colorDot, { backgroundColor: status.color }]} />
                       <View style={styles.cardMain}>
                         <Text style={styles.cardTitle}>{item.slot}</Text>
@@ -152,20 +191,11 @@ export default function LogbookView({
                         <Text style={styles.cardStatus}>{status.text}</Text>
                       </View>
 
-                      {/* Item Actions */}
                       <View style={styles.actionColumn}>
-                        <TouchableOpacity
-                          style={styles.actionBtn}
-                          onPress={() => onToggleHideEntry(item.id)}
-                        >
-                          <Text style={styles.actionIcon}>
-                            {item.hidden ? '🚫' : '👁'}
-                          </Text>
+                        <TouchableOpacity style={styles.actionBtn} onPress={() => onToggleHideEntry(item.id)}>
+                          <Text style={styles.actionIcon}>{item.hidden ? '🚫' : '👁'}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.actionBtn}
-                          onPress={() => onDeleteEntry(item.id)}
-                        >
+                        <TouchableOpacity style={styles.actionBtn} onPress={() => onDeleteEntry(item.id)}>
                           <Text style={styles.actionIcon}>🗑</Text>
                         </TouchableOpacity>
                       </View>
@@ -180,31 +210,19 @@ export default function LogbookView({
 
       {/* Avg Slot Picker Modal */}
       <Modal visible={pickerOpen} transparent animationType="fade">
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setPickerOpen(false)}
-        >
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setPickerOpen(false)}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Choose Slot Average</Text>
             {SLOTS.filter((s) => s.name !== 'Custom').map((s) => (
               <TouchableOpacity
                 key={s.name}
-                style={[
-                  styles.pickerOption,
-                  selectedAvgSlot === s.name && styles.pickerOptionActive,
-                ]}
+                style={[styles.pickerOption, selectedAvgSlot === s.name && styles.pickerOptionActive]}
                 onPress={() => {
                   setSelectedAvgSlot(s.name);
                   setPickerOpen(false);
                 }}
               >
-                <Text
-                  style={[
-                    styles.pickerOptionText,
-                    selectedAvgSlot === s.name && styles.pickerOptionTextActive,
-                  ]}
-                >
+                <Text style={[styles.pickerOptionText, selectedAvgSlot === s.name && styles.pickerOptionTextActive]}>
                   {s.name}
                 </Text>
               </TouchableOpacity>
@@ -213,7 +231,7 @@ export default function LogbookView({
         </TouchableOpacity>
       </Modal>
 
-      {/* Bottom Navigation */}
+      {/* Floating Bottom Nav */}
       <View style={styles.bottomNavContainer}>
         <View style={styles.bottomNav}>
           <TouchableOpacity style={[styles.tabBtn, styles.tabBtnActive]}>
@@ -233,25 +251,13 @@ export default function LogbookView({
 
 const styles = StyleSheet.create({
   flexOne: { flex: 1, backgroundColor: '#FBF9F4' },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 14,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-  },
+  header: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 14, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  configBtn: { backgroundColor: '#F0EDE5', padding: 8, borderRadius: 12 },
+  configIcon: { fontSize: 16 },
   appSubtitle: { fontSize: 11, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase', color: '#8B9A94' },
   appTitle: { fontSize: 27, fontWeight: '800', letterSpacing: -0.5, color: '#14201C', marginTop: 3 },
-  exportBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0D6E5E',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    gap: 5,
-  },
+  exportBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0D6E5E', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, gap: 5 },
   exportIcon: { color: '#EAF6F2', fontSize: 14, fontWeight: '800' },
   exportBtnText: { color: '#EAF6F2', fontWeight: '700', fontSize: 12.5 },
   statsContainer: { paddingHorizontal: 20, flexDirection: 'row', gap: 10 },
@@ -273,22 +279,12 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 18, fontWeight: '800', color: '#14201C', marginBottom: 4 },
   emptySub: { fontSize: 13, color: '#8B9A94' },
   dateGroup: { marginBottom: 18 },
-  dateGroupHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 9 },
+  dateGroupHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 9 },
   dateGroupTitle: { fontSize: 12, fontWeight: '700', color: '#14201C', letterSpacing: 0.4 },
   divider: { flex: 1, height: 1, backgroundColor: 'rgba(20,32,28,0.09)' },
-  dateGroupCount: { fontSize: 11, fontWeight: '600', color: '#8B9A94' },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(20,32,28,0.09)',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
-    gap: 10,
-  },
+  dayExportBtn: { backgroundColor: '#F0EDE5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  dayExportText: { fontSize: 11, fontWeight: '700', color: '#3D4C47' },
+  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: 'rgba(20,32,28,0.09)', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8, gap: 10 },
   cardHidden: { opacity: 0.4, backgroundColor: '#F0EDE5' },
   colorDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
   cardMain: { flex: 1, minWidth: 0 },
