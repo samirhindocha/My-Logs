@@ -11,8 +11,7 @@ import { exportLogsToPDF, exportLogsToDOCX } from './utils/exportReport';
 import {
   CONFIG_STORAGE_KEY,
   DEFAULT_CONFIG,
-  requestNotificationPermission,
-  scheduleAllReminders,
+  checkInAppReminders,
 } from './utils/notifications';
 
 export default function App() {
@@ -26,7 +25,7 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
 
-    const bootstrapApp = async () => {
+    const bootstrap = async () => {
       try {
         const loadedEntries = await getStoredEntries();
         if (isMounted) setEntries(loadedEntries || []);
@@ -35,19 +34,18 @@ export default function App() {
         const parsedCfg = savedCfg ? JSON.parse(savedCfg) : DEFAULT_CONFIG;
         if (isMounted) setConfig(parsedCfg);
 
-        // Safely request permission without blocking rendering
-        const hasPermission = await requestNotificationPermission();
-        if (hasPermission) {
-          await scheduleAllReminders(loadedEntries || [], parsedCfg);
-        }
+        // Check reminders safely inside state lifecycle
+        setTimeout(() => {
+          checkInAppReminders(loadedEntries || [], parsedCfg);
+        }, 1200);
       } catch (err) {
-        console.error('Bootstrap error:', err);
+        console.warn('Bootstrap warning:', err);
       } finally {
         if (isMounted) setIsReady(true);
       }
     };
 
-    bootstrapApp();
+    bootstrap();
 
     return () => {
       isMounted = false;
@@ -58,7 +56,7 @@ export default function App() {
     try {
       setConfig(newConfig);
       await AsyncStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(newConfig));
-      await scheduleAllReminders(entries, newConfig);
+      checkInAppReminders(entries, newConfig);
     } catch (err) {
       console.warn('Config save error:', err);
     }
@@ -76,7 +74,6 @@ export default function App() {
       }
       setEntries(updated);
       await saveStoredEntries(updated);
-      await scheduleAllReminders(updated, config);
       setView('log');
     } catch (err) {
       console.warn('Entry save error:', err);
@@ -88,9 +85,8 @@ export default function App() {
       const updated = entries.filter((e) => e.id !== id);
       setEntries(updated);
       await saveStoredEntries(updated);
-      await scheduleAllReminders(updated, config);
     } catch (err) {
-      console.warn('Entry delete error:', err);
+      console.warn('Delete error:', err);
     }
   };
 
