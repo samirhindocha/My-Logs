@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, SafeAreaView, StatusBar, Platform } from 'react-native';
+import { StyleSheet, SafeAreaView, StatusBar, Platform, View, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LogbookView from './components/LogbookView';
 import TrendsView from './components/TrendsView';
@@ -16,6 +16,7 @@ import {
 } from './utils/notifications';
 
 export default function App() {
+  const [isReady, setIsReady] = useState(false);
   const [view, setView] = useState('log');
   const [entries, setEntries] = useState([]);
   const [config, setConfig] = useState(DEFAULT_CONFIG);
@@ -23,51 +24,84 @@ export default function App() {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      await requestNotificationPermission();
-      const loadedEntries = await getStoredEntries();
-      setEntries(loadedEntries);
+    let isMounted = true;
 
-      const savedCfg = await AsyncStorage.getItem(CONFIG_STORAGE_KEY);
-      const parsedCfg = savedCfg ? JSON.parse(savedCfg) : DEFAULT_CONFIG;
-      setConfig(parsedCfg);
+    const bootstrapApp = async () => {
+      try {
+        const loadedEntries = await getStoredEntries();
+        if (isMounted) setEntries(loadedEntries || []);
 
-      await scheduleAllReminders(loadedEntries, parsedCfg);
-    })();
+        const savedCfg = await AsyncStorage.getItem(CONFIG_STORAGE_KEY);
+        const parsedCfg = savedCfg ? JSON.parse(savedCfg) : DEFAULT_CONFIG;
+        if (isMounted) setConfig(parsedCfg);
+
+        // Safely request permission without blocking rendering
+        const hasPermission = await requestNotificationPermission();
+        if (hasPermission) {
+          await scheduleAllReminders(loadedEntries || [], parsedCfg);
+        }
+      } catch (err) {
+        console.error('Bootstrap error:', err);
+      } finally {
+        if (isMounted) setIsReady(true);
+      }
+    };
+
+    bootstrapApp();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleSaveConfig = async (newConfig) => {
-    setConfig(newConfig);
-    await AsyncStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(newConfig));
-    await scheduleAllReminders(entries, newConfig);
+    try {
+      setConfig(newConfig);
+      await AsyncStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(newConfig));
+      await scheduleAllReminders(entries, newConfig);
+    } catch (err) {
+      console.warn('Config save error:', err);
+    }
   };
 
   const handleSaveEntry = async (newEntry) => {
-    const existsIndex = entries.findIndex((e) => e.id === newEntry.id);
-    let updated;
-    if (existsIndex >= 0) {
-      updated = [...entries];
-      updated[existsIndex] = newEntry;
-    } else {
-      updated = [newEntry, ...entries];
+    try {
+      const existsIndex = entries.findIndex((e) => e.id === newEntry.id);
+      let updated;
+      if (existsIndex >= 0) {
+        updated = [...entries];
+        updated[existsIndex] = newEntry;
+      } else {
+        updated = [newEntry, ...entries];
+      }
+      setEntries(updated);
+      await saveStoredEntries(updated);
+      await scheduleAllReminders(updated, config);
+      setView('log');
+    } catch (err) {
+      console.warn('Entry save error:', err);
     }
-    setEntries(updated);
-    await saveStoredEntries(updated);
-    await scheduleAllReminders(updated, config);
-    setView('log');
   };
 
   const handleDeleteEntry = async (id) => {
-    const updated = entries.filter((e) => e.id !== id);
-    setEntries(updated);
-    await saveStoredEntries(updated);
-    await scheduleAllReminders(updated, config);
+    try {
+      const updated = entries.filter((e) => e.id !== id);
+      setEntries(updated);
+      await saveStoredEntries(updated);
+      await scheduleAllReminders(updated, config);
+    } catch (err) {
+      console.warn('Entry delete error:', err);
+    }
   };
 
   const handleToggleHideEntry = async (id) => {
-    const updated = entries.map((e) => (e.id === id ? { ...e, hidden: !e.hidden } : e));
-    setEntries(updated);
-    await saveStoredEntries(updated);
+    try {
+      const updated = entries.map((e) => (e.id === id ? { ...e, hidden: !e.hidden } : e));
+      setEntries(updated);
+      await saveStoredEntries(updated);
+    } catch (err) {
+      console.warn('Toggle hide error:', err);
+    }
   };
 
   const handleExportPDF = async (startDate, endDate) => {
@@ -88,9 +122,17 @@ export default function App() {
     await exportLogsToPDF(entries, start, end);
   };
 
+  if (!isReady) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#0D6E5E" />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FBF9F4" />
 
       {view === 'log' && (
         <LogbookView
@@ -142,6 +184,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FBF9F4',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 0,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#FBF9F4',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
