@@ -65,10 +65,14 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const recognized = await TextRecognition.recognize(result.assets[0].uri);
-        const parsed = parseAccuChekDisplay(recognized.text);
+        const lines = recognized.blocks.flatMap((block) => block.lines.map((line) => line.text));
+        const parsed = parseAccuChekDisplay(lines);
 
         if (!parsed.reading) {
-          Alert.alert('No Reading Found', 'Could not detect a glucose value in the photo. Please try again or enter it manually.');
+          Alert.alert(
+            'No Reading Found',
+            `Could not detect a glucose value in the photo. Please try again or enter it manually.\n\nDetected text:\n${recognized.text || '(none)'}`
+          );
           return;
         }
 

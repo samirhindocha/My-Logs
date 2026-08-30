@@ -8,9 +8,8 @@ import {
   Modal,
   Alert,
   Platform,
+  Share,
 } from 'react-native';
-import * as Sharing from 'expo-sharing';
-import { File, Paths } from 'expo-file-system';
 import { SLOTS } from '../constants/theme';
 import { formatDateHeader, getReadingStatus } from '../utils/storage';
 
@@ -94,24 +93,17 @@ Insulin
 Before Breakfast: ${amDose}
 Before Dinner: ${pmDose}`;
 
-    const fileName = `Glucose_Log_${dateStr}.txt`;
-
     try {
       if (Platform.OS === 'web') {
-        const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        a.click();
-        URL.revokeObjectURL(url);
+        if (navigator.share) {
+          await navigator.share({ text: reportText, title: `Glucose Log - ${formattedDate}` });
+        } else {
+          Alert.alert('Export Day Report', reportText);
+        }
         return;
       }
 
-      const file = new File(Paths.cache, fileName);
-      if (file.exists) file.delete();
-      file.write(reportText);
-      await Sharing.shareAsync(file.uri, { UTI: 'public.plain-text', mimeType: 'text/plain' });
+      await Share.share({ message: reportText });
     } catch (e) {
       Alert.alert('Export Day Report', reportText);
     }

@@ -71,10 +71,10 @@ export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
     return { name: slot.name, avg };
   });
 
-  // Chart coordinate calculation (bounded to 40 - 300 mg/dL to prevent top/bottom dot cutoffs)
+  // Chart coordinate calculation (bounded to 20 - 350 mg/dL to prevent top/bottom dot cutoffs)
   const chartHeight = 140;
-  const yMin = 40;
-  const yMax = 300;
+  const yMin = 20;
+  const yMax = 350;
   const getY = (val) => {
     const clamped = Math.max(yMin, Math.min(yMax, val));
     return chartHeight - ((clamped - yMin) / (yMax - yMin)) * chartHeight;
@@ -83,17 +83,23 @@ export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
   const bandTop = getY(140);
   const bandHeight = Math.max(14, getY(70) - getY(140));
 
-  const totalPoints = allReadings.length;
-  const getX = (idx) => {
-    if (totalPoints <= 1) return plotWidth / 2;
+  // X axis runs along the real calendar timeline, from the start of the selected
+  // period through to today — so the plot always extends up to "today", even if
+  // the most recent reading was logged a few days ago.
+  const periodStartMs = cutoffDate.getTime();
+  const todayMs = now.getTime();
+  const totalRangeMs = Math.max(1, todayMs - periodStartMs);
+  const getX = (dateStr) => {
+    const t = new Date(dateStr).getTime();
     const usableWidth = Math.max(0, plotWidth - 12);
-    return 6 + (idx / (totalPoints - 1)) * usableWidth;
+    const ratio = Math.min(1, Math.max(0, (t - periodStartMs) / totalRangeMs));
+    return 6 + ratio * usableWidth;
   };
 
-  const chartPoints = allReadings.map((item, idx) => {
+  const chartPoints = allReadings.map((item) => {
     const y = getY(Number(item.reading));
     return {
-      x: getX(idx),
+      x: getX(item.date),
       y: Math.max(8, Math.min(chartHeight - 8, y)),
       reading: item.reading,
       slot: item.slot,
@@ -115,21 +121,13 @@ export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
     return { left: midX - length / 2, top: midY - LINE_THICKNESS / 2, length, angle };
   });
 
-  // A handful of evenly-spaced date labels along the bottom axis
-  const xAxisLabelCount = Math.min(5, totalPoints);
-  const xAxisIndices = [
-    ...new Set(
-      xAxisLabelCount <= 1
-        ? (totalPoints ? [0] : [])
-        : Array.from({ length: xAxisLabelCount }, (_, i) =>
-            Math.round((i * (totalPoints - 1)) / (xAxisLabelCount - 1))
-          )
-    ),
-  ];
-  const xAxisLabels = xAxisIndices.map((idx) => ({
-    x: chartPoints[idx].x,
-    text: formatAxisDate(allReadings[idx].date),
-  }));
+  // Evenly-spaced date labels along the bottom axis, spanning the period start through today
+  const xAxisLabelCount = 5;
+  const xAxisLabels = Array.from({ length: xAxisLabelCount }, (_, i) => {
+    const t = periodStartMs + (i / (xAxisLabelCount - 1)) * totalRangeMs;
+    const dateStr = new Date(t).toISOString().split('T')[0];
+    return { x: getX(dateStr), text: formatAxisDate(dateStr) };
+  });
 
   return (
     <View style={styles.flexOne}>

@@ -42,13 +42,7 @@ const buildExportMatrix = (entries, startDate, endDate) => {
     if (item.pm) row.pm = item.pm;
     if (item.extra) row.extra = item.extra;
 
-    const valDisplay = item.isExtremeLow
-      ? `Ext Low (${item.reading})`
-      : item.isExtremeHigh
-      ? `Ext High (${item.reading})`
-      : item.reading
-      ? String(item.reading)
-      : '';
+    const valDisplay = item.reading ? String(item.reading) : '';
 
     switch (item.slot) {
       case 'Fasting':
@@ -84,9 +78,9 @@ const buildExportMatrix = (entries, startDate, endDate) => {
     .map((d) => {
       const r = byDate[d];
       const units = [];
-      if (r.am) units.push(`${r.am} AM`);
-      if (r.pm) units.push(`${r.pm} PM`);
-      if (r.extra) units.push(`${r.extra} Ext`);
+      if (r.am) units.push(r.am);
+      if (r.pm) units.push(r.pm);
+      if (r.extra) units.push(r.extra);
       return {
         ...r,
         otherText: r.other.join(', '),
@@ -119,11 +113,11 @@ const buildTableHtml = (rows) => {
       <head>
         <meta charset="utf-8">
         <style>
-          @page { size: landscape; margin: 12mm; }
-          body { font-family: Arial, sans-serif; padding: 15px; color: #000; }
-          table { width: 100%; border-collapse: collapse; border: 2px solid #000; }
-          th, td { border: 1.5px solid #000; padding: 8px 6px; text-align: center; font-size: 13px; }
-          th { font-weight: bold; font-size: 14px; background-color: #f3f3f3; }
+          @page { size: portrait; margin: 10mm; }
+          body { font-family: Arial, sans-serif; padding: 10px; color: #000; }
+          table { width: 100%; border-collapse: collapse; border: 2px solid #000; table-layout: fixed; }
+          th, td { border: 1.5px solid #000; padding: 4px 3px; text-align: center; font-size: 9px; word-wrap: break-word; }
+          th { font-weight: bold; font-size: 10px; background-color: #f3f3f3; }
         </style>
       </head>
       <body>

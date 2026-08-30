@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "My Logs",
+    "name": "Log Buddy",
     "slug": "my-logs",
     "owner": "samirhindochas-team",
     "version": "1.0.0",
@@ -29,7 +29,8 @@
       }
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      "expo-notifications"
     ]
   }
 }

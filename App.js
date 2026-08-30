@@ -11,7 +11,8 @@ import { exportLogsToPDF, exportLogsToDOCX } from './utils/exportReport';
 import {
   CONFIG_STORAGE_KEY,
   DEFAULT_CONFIG,
-  checkInAppReminders,
+  setupNotifications,
+  checkReminders,
 } from './utils/notifications';
 
 export default function App() {
@@ -27,6 +28,8 @@ export default function App() {
 
     const bootstrap = async () => {
       try {
+        await setupNotifications();
+
         const loadedEntries = await getStoredEntries();
         if (isMounted) setEntries(loadedEntries || []);
 
@@ -36,7 +39,7 @@ export default function App() {
 
         // Check reminders safely inside state lifecycle
         setTimeout(() => {
-          checkInAppReminders(loadedEntries || [], parsedCfg);
+          checkReminders(loadedEntries || [], parsedCfg);
         }, 1200);
       } catch (err) {
         console.warn('Bootstrap warning:', err);
@@ -77,7 +80,7 @@ export default function App() {
     try {
       setConfig(newConfig);
       await AsyncStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(newConfig));
-      checkInAppReminders(entries, newConfig);
+      checkReminders(entries, newConfig);
     } catch (err) {
       console.warn('Config save error:', err);
     }
