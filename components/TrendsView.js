@@ -18,9 +18,19 @@ const PERIOD_OPTIONS = [
   { label: 'Last 3 months', days: 90 },
 ];
 
+const Y_AXIS_LEVELS = [250, 200, 140, 100, 70];
+const Y_AXIS_WIDTH = 30;
+
+const formatAxisDate = (dateStr) => {
+  const parts = (dateStr || '').split('-');
+  if (parts.length < 3) return dateStr || '';
+  return `${parts[2]}/${parts[1]}`;
+};
+
 export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
   const [selectedPeriod, setSelectedPeriod] = useState(PERIOD_OPTIONS[4]); // Default: Last 3 months
   const [periodPickerOpen, setPeriodPickerOpen] = useState(false);
+  const [plotWidth, setPlotWidth] = useState(0);
 
   // Filter entries within selected period range
   const now = new Date();
@@ -74,17 +84,52 @@ export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
   const bandHeight = Math.max(14, getY(70) - getY(140));
 
   const totalPoints = allReadings.length;
+  const getX = (idx) => {
+    if (totalPoints <= 1) return plotWidth / 2;
+    const usableWidth = Math.max(0, plotWidth - 12);
+    return 6 + (idx / (totalPoints - 1)) * usableWidth;
+  };
+
   const chartPoints = allReadings.map((item, idx) => {
-    const pctX = totalPoints <= 1 ? 50 : 6 + (idx / (totalPoints - 1)) * 88;
     const y = getY(Number(item.reading));
     return {
-      leftPct: `${pctX}%`,
-      top: Math.max(8, Math.min(chartHeight - 8, y)),
+      x: getX(idx),
+      y: Math.max(8, Math.min(chartHeight - 8, y)),
       reading: item.reading,
       slot: item.slot,
       date: item.date,
     };
   });
+
+  // Line segments connecting consecutive readings (pure-View rotated bars, no SVG dependency).
+  // RN rotates a View around its own center, so each bar is centered on the segment's midpoint.
+  const LINE_THICKNESS = 1.5;
+  const lineSegments = chartPoints.slice(1).map((pt, i) => {
+    const prev = chartPoints[i];
+    const dx = pt.x - prev.x;
+    const dy = pt.y - prev.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+    const midX = (prev.x + pt.x) / 2;
+    const midY = (prev.y + pt.y) / 2;
+    return { left: midX - length / 2, top: midY - LINE_THICKNESS / 2, length, angle };
+  });
+
+  // A handful of evenly-spaced date labels along the bottom axis
+  const xAxisLabelCount = Math.min(5, totalPoints);
+  const xAxisIndices = [
+    ...new Set(
+      xAxisLabelCount <= 1
+        ? (totalPoints ? [0] : [])
+        : Array.from({ length: xAxisLabelCount }, (_, i) =>
+            Math.round((i * (totalPoints - 1)) / (xAxisLabelCount - 1))
+          )
+    ),
+  ];
+  const xAxisLabels = xAxisIndices.map((idx) => ({
+    x: chartPoints[idx].x,
+    text: formatAxisDate(allReadings[idx].date),
+  }));
 
   return (
     <View style={styles.flexOne}>
@@ -110,42 +155,86 @@ export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
             <Text style={styles.unitText}>mg/dL</Text>
           </View>
 
-          <View style={[styles.chartArea, { height: chartHeight }]}>
-            {/* Target Range Band (70 - 140 mg/dL) */}
-            <View style={[styles.rangeBand, { top: bandTop, height: bandHeight }]} />
+          <View style={styles.chartRow}>
+            {/* Y Axis Value Labels */}
+            <View style={[styles.yAxisLabels, { height: chartHeight }]}>
+              {Y_AXIS_LEVELS.map((level) => (
+                <Text key={level} style={[styles.axisLabelY, { top: getY(level) - 7 }]}>
+                  {level}
+                </Text>
+              ))}
+            </View>
 
-            {/* Reference Grid Lines */}
-            {[70, 100, 140, 200, 250].map((level) => (
-              <View key={level} style={[styles.gridLine, { top: getY(level) }]} />
-            ))}
+            <View
+              style={[styles.chartArea, { height: chartHeight }]}
+              onLayout={(e) => setPlotWidth(e.nativeEvent.layout.width)}
+            >
+              {/* Target Range Band (70 - 140 mg/dL) */}
+              <View style={[styles.rangeBand, { top: bandTop, height: bandHeight }]} />
 
-            {/* Plotted Dots for all readings */}
-            {chartPoints.map((pt, i) => {
-              const dotStatus = getReadingStatus(pt.reading);
-              return (
+              {/* Reference Grid Lines */}
+              {Y_AXIS_LEVELS.map((level) => (
+                <View key={level} style={[styles.gridLine, { top: getY(level) }]} />
+              ))}
+
+              {/* Trend Line connecting consecutive readings */}
+              {lineSegments.map((seg, i) => (
                 <View
                   key={i}
                   style={[
-                    styles.dotContainer,
-                    { left: pt.leftPct, top: pt.top - 6 },
+                    styles.lineSegment,
+                    {
+                      left: seg.left,
+                      top: seg.top,
+                      width: seg.length,
+                      transform: [{ rotate: `${seg.angle}deg` }],
+                    },
                   ]}
-                >
-                  <View
-                    style={[
-                      styles.chartDot,
-                      { borderColor: dotStatus.color },
-                    ]}
-                  />
-                </View>
-              );
-            })}
+                />
+              ))}
 
-            {chartPoints.length === 0 && (
-              <View style={styles.noDataBox}>
-                <Text style={styles.noDataText}>No readings logged in this period</Text>
-              </View>
-            )}
+              {/* Plotted Dots for all readings */}
+              {chartPoints.map((pt, i) => {
+                const dotStatus = getReadingStatus(pt.reading);
+                return (
+                  <View
+                    key={i}
+                    style={[
+                      styles.dotContainer,
+                      { left: pt.x - 6, top: pt.y - 6 },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.chartDot,
+                        { borderColor: dotStatus.color },
+                      ]}
+                    />
+                  </View>
+                );
+              })}
+
+              {chartPoints.length === 0 && (
+                <View style={styles.noDataBox}>
+                  <Text style={styles.noDataText}>No readings logged in this period</Text>
+                </View>
+              )}
+            </View>
           </View>
+
+          {/* X Axis Date Labels */}
+          {xAxisLabels.length > 0 && (
+            <View style={[styles.xAxisRow, { marginLeft: Y_AXIS_WIDTH + 6 }]}>
+              {xAxisLabels.map((lbl, i) => (
+                <Text
+                  key={i}
+                  style={[styles.axisLabelX, { left: lbl.x - 20 }]}
+                >
+                  {lbl.text}
+                </Text>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Average by Time Slot */}
@@ -312,11 +401,46 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#8B9A94',
   },
+  chartRow: {
+    flexDirection: 'row',
+    marginVertical: 6,
+  },
+  yAxisLabels: {
+    width: Y_AXIS_WIDTH,
+    position: 'relative',
+    marginRight: 6,
+  },
+  axisLabelY: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    fontSize: 9.5,
+    fontWeight: '600',
+    color: '#8B9A94',
+    textAlign: 'right',
+  },
   chartArea: {
     position: 'relative',
-    width: '100%',
-    marginVertical: 6,
+    flex: 1,
     overflow: 'hidden',
+  },
+  lineSegment: {
+    position: 'absolute',
+    height: 1.5,
+    backgroundColor: 'rgba(20,32,28,0.28)',
+  },
+  xAxisRow: {
+    position: 'relative',
+    height: 14,
+  },
+  axisLabelX: {
+    position: 'absolute',
+    width: 40,
+    top: 0,
+    fontSize: 9.5,
+    fontWeight: '600',
+    color: '#8B9A94',
+    textAlign: 'center',
   },
   rangeBand: {
     position: 'absolute',

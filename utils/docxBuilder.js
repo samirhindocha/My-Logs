@@ -55,7 +55,7 @@ ${headerRow}
 ${bodyRows}
 </w:tbl>
 <w:sectPr>
-<w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/>
+<w:pgSz w:w="11906" w:h="16838"/>
 <w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="0" w:footer="0" w:gutter="0"/>
 </w:sectPr>
 </w:body>

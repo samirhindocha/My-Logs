@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import TextRecognition from '@react-native-ml-kit/text-recognition';
 import { SLOTS } from '../constants/theme';
 import { formatDateDisplay, getReadingStatus } from '../utils/storage';
 import { parseAccuChekDisplay } from '../utils/ocrParser';
@@ -63,12 +64,15 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const mockMeterText = "0:04 28-8 164 mg/dL memory";
-        const parsed = parseAccuChekDisplay(mockMeterText);
+        const recognized = await TextRecognition.recognize(result.assets[0].uri);
+        const parsed = parseAccuChekDisplay(recognized.text);
 
-        if (parsed.reading) {
-          setReading(parsed.reading);
+        if (!parsed.reading) {
+          Alert.alert('No Reading Found', 'Could not detect a glucose value in the photo. Please try again or enter it manually.');
+          return;
         }
+
+        setReading(parsed.reading);
         if (parsed.time && selectedSlot === 'Custom') setCustomTime(parsed.time);
         if (parsed.date) {
           const d = new Date(parsed.date);
@@ -77,7 +81,7 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
 
         Alert.alert(
           'Glucometer Scanned',
-          `• Reading: ${parsed.reading || '—'} mg/dL\n• Date: ${parsed.date || 'Today'}\n• Time: ${parsed.time || '—'}\n\nPlease review and press "Save reading".`
+          `• Reading: ${parsed.reading} mg/dL\n• Date: ${parsed.date || 'Today'}\n• Time: ${parsed.time || '—'}\n\nPlease review and press "Save reading".`
         );
       }
     } catch (e) {

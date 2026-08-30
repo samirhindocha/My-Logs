@@ -41,13 +41,24 @@ export default function LogbookView({
     ? Math.round(slotMatches.reduce((acc, c) => acc + Number(c.reading), 0) / slotMatches.length)
     : '—';
 
-  // Units today
+  // Units today — morning (AM) and evening (PM) doses. If nothing has been
+  // logged yet today, fall back to the most recently stored dose for that slot.
   const todayStr = new Date().toISOString().split('T')[0];
-  const todayEntries = entries.filter((e) => e.date === todayStr);
-  const totalUnitsToday = todayEntries.reduce(
-    (acc, curr) => acc + (Number(curr.am) || 0) + (Number(curr.pm) || 0) + (Number(curr.extra) || 0),
-    0
-  );
+  const chronological = [...entries].sort((a, b) => {
+    if (a.date === b.date) return (a.time || '').localeCompare(b.time || '');
+    return a.date.localeCompare(b.date);
+  });
+  const todayChrono = chronological.filter((e) => e.date === todayStr);
+
+  const findLatestDose = (list, field) => {
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i][field]) return list[i][field];
+    }
+    return null;
+  };
+
+  const morningUnits = findLatestDose(todayChrono, 'am') || findLatestDose(chronological, 'am');
+  const eveningUnits = findLatestDose(todayChrono, 'pm') || findLatestDose(chronological, 'pm');
 
   // Single Day Plain Text Export
   const handleExportSingleDay = async (dateStr) => {
@@ -141,11 +152,23 @@ Before Dinner: ${pmDose}`;
 
         <View style={styles.statBoxSecondary}>
           <Text style={styles.statLabelSecondary}>Units today</Text>
-          <View style={styles.rowBaseline}>
-            <Text style={styles.statValueSecondary}>{totalUnitsToday}</Text>
-            <Text style={styles.unitSecondary}> u</Text>
+          <View style={styles.unitsSplitRow}>
+            <View style={styles.unitsSplitCol}>
+              <Text style={styles.unitsSplitValue}>
+                {morningUnits || '—'}
+                {morningUnits ? <Text style={styles.unitsSplitUnit}>u</Text> : null}
+              </Text>
+              <Text style={styles.unitsSplitLabel}>Morning</Text>
+            </View>
+            <View style={styles.unitsSplitDivider} />
+            <View style={styles.unitsSplitCol}>
+              <Text style={styles.unitsSplitValue}>
+                {eveningUnits || '—'}
+                {eveningUnits ? <Text style={styles.unitsSplitUnit}>u</Text> : null}
+              </Text>
+              <Text style={styles.unitsSplitLabel}>Evening</Text>
+            </View>
           </View>
-          <Text style={styles.statSubSecondary}>{todayEntries.length} doses recorded</Text>
         </View>
       </View>
 
@@ -281,6 +304,12 @@ const styles = StyleSheet.create({
   statValueSecondary: { fontSize: 28, fontWeight: '800', color: '#14201C', letterSpacing: -0.5 },
   unitSecondary: { fontSize: 11, fontWeight: '600', color: '#8B9A94' },
   statSubSecondary: { fontSize: 11, fontWeight: '500', color: '#8B9A94', marginTop: 2 },
+  unitsSplitRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 10 },
+  unitsSplitCol: { flex: 1 },
+  unitsSplitValue: { fontSize: 20, fontWeight: '800', color: '#14201C', letterSpacing: -0.5 },
+  unitsSplitUnit: { fontSize: 11, fontWeight: '600', color: '#8B9A94' },
+  unitsSplitLabel: { fontSize: 10, fontWeight: '600', color: '#8B9A94', marginTop: 1 },
+  unitsSplitDivider: { width: 1, height: 26, backgroundColor: 'rgba(20,32,28,0.09)' },
   rowBaseline: { flexDirection: 'row', alignItems: 'baseline', marginTop: 4 },
   listContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 110 },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },

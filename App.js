@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, SafeAreaView, StatusBar, Platform, View, ActivityIndicator } from 'react-native';
+import { StyleSheet, SafeAreaView, StatusBar, Platform, View, ActivityIndicator, BackHandler } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LogbookView from './components/LogbookView';
 import TrendsView from './components/TrendsView';
@@ -51,6 +51,27 @@ export default function App() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const onBackPress = () => {
+      if (isExportOpen) {
+        setIsExportOpen(false);
+        return true;
+      }
+      if (isConfigOpen) {
+        setIsConfigOpen(false);
+        return true;
+      }
+      if (view === 'entry' || view === 'trends') {
+        setView('log');
+        return true;
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, [view, isExportOpen, isConfigOpen]);
 
   const handleSaveConfig = async (newConfig) => {
     try {
