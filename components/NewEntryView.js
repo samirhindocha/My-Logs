@@ -15,20 +15,29 @@ import { SLOTS } from '../constants/theme';
 import { formatDateDisplay, getReadingStatus } from '../utils/storage';
 import { parseAccuChekDisplay } from '../utils/ocrParser';
 
-export default function NewEntryView({ existingEntries = [], onSave, onCancel }) {
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedSlot, setSelectedSlot] = useState('Fasting');
-  const [customLabel, setCustomLabel] = useState('');
-  const [customTime, setCustomTime] = useState('10:30');
-  const [customPeriod, setCustomPeriod] = useState('AM');
+const CORE_SLOT_NAMES = SLOTS.filter((s) => s.name !== 'Custom').map((s) => s.name);
+
+export default function NewEntryView({ existingEntries = [], onSave, onCancel, editingEntry = null, onImportMySugr }) {
+  const isCustomEditingSlot = !!editingEntry && !CORE_SLOT_NAMES.includes(editingEntry.slot);
+  const editedTimeMatch = editingEntry?.time?.match(/^(\d{1,2}:\d{2})\s*(AM|PM)$/i);
+
+  const [selectedDate, setSelectedDate] = useState(
+    editingEntry ? new Date(editingEntry.date) : new Date()
+  );
+  const [selectedSlot, setSelectedSlot] = useState(
+    editingEntry ? (isCustomEditingSlot ? 'Custom' : editingEntry.slot) : 'Fasting'
+  );
+  const [customLabel, setCustomLabel] = useState(isCustomEditingSlot ? editingEntry.slot : '');
+  const [customTime, setCustomTime] = useState(editedTimeMatch ? editedTimeMatch[1] : '10:30');
+  const [customPeriod, setCustomPeriod] = useState(editedTimeMatch ? editedTimeMatch[2].toUpperCase() : 'AM');
 
   const [focusField, setFocusField] = useState('reading');
-  const [reading, setReading] = useState('');
+  const [reading, setReading] = useState(editingEntry ? String(editingEntry.reading ?? '') : '');
 
   const lastEntryWithUnits = [...existingEntries].reverse().find((e) => e.am || e.pm || e.extra);
-  const [amUnits, setAmUnits] = useState(lastEntryWithUnits?.am || '');
-  const [pmUnits, setPmUnits] = useState(lastEntryWithUnits?.pm || '');
-  const [extraUnits, setExtraUnits] = useState('');
+  const [amUnits, setAmUnits] = useState(editingEntry ? editingEntry.am || '' : lastEntryWithUnits?.am || '');
+  const [pmUnits, setPmUnits] = useState(editingEntry ? editingEntry.pm || '' : lastEntryWithUnits?.pm || '');
+  const [extraUnits, setExtraUnits] = useState(editingEntry ? editingEntry.extra || '' : '');
 
   const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
   const [jumpDateInput, setJumpDateInput] = useState(
@@ -142,13 +151,9 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
     const dateStr = selectedDate.toISOString().split('T')[0];
     const finalSlot = selectedSlot === 'Custom' ? customLabel || 'Custom' : selectedSlot;
 
-    const existingIndex = existingEntries.findIndex(
-      (e) => e.date === dateStr && e.slot === finalSlot
-    );
-
-    const performSave = () => {
+    const performSave = (id) => {
       onSave({
-        id: existingIndex >= 0 ? existingEntries[existingIndex].id : Date.now().toString(),
+        id,
         date: dateStr,
         slot: finalSlot,
         time: selectedSlot === 'Custom' ? `${customTime} ${customPeriod}` : '',
@@ -162,17 +167,27 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
       });
     };
 
+    // Editing an existing record just updates it in place — no duplicate check needed.
+    if (editingEntry) {
+      performSave(editingEntry.id);
+      return;
+    }
+
+    const existingIndex = existingEntries.findIndex(
+      (e) => e.date === dateStr && e.slot === finalSlot
+    );
+
     if (existingIndex >= 0) {
       Alert.alert(
         'Duplicate Entry',
         `A log for ${finalSlot} on this date already exists. Do you want to replace it?`,
         [
           { text: 'Discard', style: 'cancel' },
-          { text: 'Replace', style: 'destructive', onPress: performSave },
+          { text: 'Replace', style: 'destructive', onPress: () => performSave(existingEntries[existingIndex].id) },
         ]
       );
     } else {
-      performSave();
+      performSave(Date.now().toString());
     }
   };
 
@@ -183,10 +198,15 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
         <TouchableOpacity style={styles.closeBtn} onPress={onCancel}>
           <Text style={styles.closeBtnText}>✕</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New reading</Text>
-        <TouchableOpacity style={styles.cameraScanBtn} onPress={handleCaptureMeter}>
-          <Text style={styles.cameraIcon}>📷 Scan</Text>
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{editingEntry ? 'Edit reading' : 'New reading'}</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.importBtn} onPress={onImportMySugr}>
+            <Text style={styles.importIcon}>📥</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.cameraScanBtn} onPress={handleCaptureMeter}>
+            <Text style={styles.cameraIcon}>📷 Scan</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -375,7 +395,7 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
           onPress={handleSave}
         >
           <Text style={[styles.saveText, canSave ? styles.saveTextActive : styles.saveTextDisabled]}>
-            {canSave ? 'Save reading' : 'Enter a reading to save'}
+            {canSave ? (editingEntry ? 'Update reading' : 'Save reading') : 'Enter a reading to save'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -413,6 +433,9 @@ const styles = StyleSheet.create({
   closeBtn: { width: 40, height: 40, borderRadius: 13, backgroundColor: '#F0EDE5', alignItems: 'center', justifyContent: 'center' },
   closeBtnText: { fontSize: 18, fontWeight: '600', color: '#3D4C47' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#14201C' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  importBtn: { width: 40, height: 40, borderRadius: 13, backgroundColor: '#F0EDE5', alignItems: 'center', justifyContent: 'center' },
+  importIcon: { fontSize: 16 },
   cameraScanBtn: { backgroundColor: '#0D6E5E', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
   cameraIcon: { color: '#EAF6F2', fontWeight: '700', fontSize: 12.5 },
   scrollContent: { paddingHorizontal: 16, paddingBottom: 16 },

@@ -19,6 +19,7 @@ export default function LogbookView({
   onOpenConfig,
   onGoTrends,
   onOpenEntry,
+  onEditEntry,
   onDeleteEntry,
   onToggleHideEntry,
 }) {
@@ -226,6 +227,9 @@ Before Dinner: ${pmDose}`;
                       </View>
 
                       <View style={styles.actionColumn}>
+                        <TouchableOpacity style={styles.actionBtn} onPress={() => onEditEntry(item)}>
+                          <Text style={styles.actionIcon}>✏️</Text>
+                        </TouchableOpacity>
                         <TouchableOpacity style={styles.actionBtn} onPress={() => onToggleHideEntry(item.id)}>
                           <Text style={styles.actionIcon}>{item.hidden ? '🚫' : '👁'}</Text>
                         </TouchableOpacity>

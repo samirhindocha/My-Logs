@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, Modal, TextInput, TouchableOpacity, Alert } from 'react-native';
 
-export default function ConfigModal({ visible, config, onClose, onSaveConfig }) {
+export default function ConfigModal({ visible, config, onClose, onSaveConfig, onSendTestNotification, onCheckRemindersNow }) {
   const [lastAppointment, setLastAppointment] = useState(config.lastDoctorAppointment || '');
   const [missingDays, setMissingDays] = useState(config.missingSlotDaysThreshold || '20');
   const [sixReportsDays, setSixReportsDays] = useState(config.sixReportsReminderDays || '14');
@@ -58,6 +58,19 @@ export default function ConfigModal({ visible, config, onClose, onSaveConfig }) 
           <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
             <Text style={styles.saveBtnText}>Save Settings</Text>
           </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          <Text style={styles.fieldLabel}>Debug Notifications</Text>
+          <TouchableOpacity style={styles.debugBtn} onPress={onSendTestNotification}>
+            <Text style={styles.debugBtnText}>Send Test Notification</Text>
+          </TouchableOpacity>
+          <Text style={styles.helperText}>Confirms whether notifications work on this device at all.</Text>
+
+          <TouchableOpacity style={styles.debugBtn} onPress={onCheckRemindersNow}>
+            <Text style={styles.debugBtnText}>Check Reminders Now</Text>
+          </TouchableOpacity>
+          <Text style={styles.helperText}>Re-runs the reminder checks immediately and tells you what it found.</Text>
         </View>
       </View>
     </Modal>
@@ -75,4 +88,7 @@ const styles = StyleSheet.create({
   helperText: { fontSize: 10.5, color: '#8B9A94', marginTop: 2, marginBottom: 4 },
   saveBtn: { backgroundColor: '#0D6E5E', height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
   saveBtnText: { color: '#EAF6F2', fontWeight: '700', fontSize: 14 },
+  divider: { height: 1, backgroundColor: 'rgba(20,32,28,0.09)', marginTop: 18, marginBottom: 4 },
+  debugBtn: { backgroundColor: '#F0EDE5', height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
+  debugBtnText: { color: '#3D4C47', fontWeight: '700', fontSize: 13 },
 });

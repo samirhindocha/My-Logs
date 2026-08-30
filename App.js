@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, SafeAreaView, StatusBar, Platform, View, ActivityIndicator, BackHandler } from 'react-native';
+import { StyleSheet, SafeAreaView, StatusBar, Platform, View, ActivityIndicator, BackHandler, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import LogbookView from './components/LogbookView';
 import TrendsView from './components/TrendsView';
 import NewEntryView from './components/NewEntryView';
@@ -8,11 +10,13 @@ import ExportModal from './components/ExportModal';
 import ConfigModal from './components/ConfigModal';
 import { getStoredEntries, saveStoredEntries } from './utils/storage';
 import { exportLogsToPDF, exportLogsToDOCX } from './utils/exportReport';
+import { parseMySugrCsv } from './utils/mySugrImport';
 import {
   CONFIG_STORAGE_KEY,
   DEFAULT_CONFIG,
   setupNotifications,
   checkReminders,
+  sendTestNotification,
 } from './utils/notifications';
 
 export default function App() {
@@ -22,13 +26,20 @@ export default function App() {
   const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
 
     const bootstrap = async () => {
       try {
-        await setupNotifications();
+        const notificationsGranted = await setupNotifications();
+        if (!notificationsGranted) {
+          Alert.alert(
+            'Notifications Disabled',
+            'Reminder notifications won\'t show up because notification permission was not granted. Enable it for this app in your device Settings if you want reminders.'
+          );
+        }
 
         const loadedEntries = await getStoredEntries();
         if (isMounted) setEntries(loadedEntries || []);
@@ -98,6 +109,7 @@ export default function App() {
       }
       setEntries(updated);
       await saveStoredEntries(updated);
+      setEditingEntry(null);
       setView('log');
     } catch (err) {
       console.warn('Entry save error:', err);
@@ -134,6 +146,66 @@ export default function App() {
     if (success) setIsExportOpen(false);
   };
 
+  const handleImportMySugr = async () => {
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({ type: '*/*' });
+      if (picked.canceled || !picked.assets || !picked.assets.length) return;
+
+      const csvText = await new File(picked.assets[0].uri).text();
+      const { entries: parsed, skipped } = parseMySugrCsv(csvText);
+
+      if (!parsed.length) {
+        Alert.alert('Import Failed', 'Could not find any readings in that file. Make sure it\'s a mySugr CSV export.');
+        return;
+      }
+
+      const existingKeys = new Set(entries.map((e) => `${e.date}|${e.time}|${e.reading}`));
+      const now = Date.now();
+      const newEntries = [];
+      let duplicates = 0;
+
+      parsed.forEach((entry, index) => {
+        const key = `${entry.date}|${entry.time}|${entry.reading}`;
+        if (existingKeys.has(key)) {
+          duplicates++;
+          return;
+        }
+        existingKeys.add(key);
+        newEntries.push({ ...entry, id: `mysugr_${now}_${index}` });
+      });
+
+      if (newEntries.length > 0) {
+        const updated = [...newEntries, ...entries];
+        setEntries(updated);
+        await saveStoredEntries(updated);
+      }
+
+      Alert.alert(
+        'Import Complete',
+        `Imported ${newEntries.length} new reading${newEntries.length === 1 ? '' : 's'}.` +
+          (duplicates ? `\n${duplicates} already imported (skipped).` : '') +
+          (skipped ? `\n${skipped} row${skipped === 1 ? '' : 's'} could not be read.` : '') +
+          `\n\nMeal-time slots were guessed from time of day — review and adjust any that look wrong.`
+      );
+    } catch (err) {
+      console.warn('mySugr import error:', err);
+      Alert.alert('Import Failed', 'Could not read that file.');
+    }
+  };
+
+  const handleSendTestNotification = async () => {
+    await sendTestNotification();
+    Alert.alert('Test Sent', 'Check your notification panel now. If nothing shows up, notification permission is likely blocked in your device Settings for this app.');
+  };
+
+  const handleCheckRemindersNow = async () => {
+    const result = await checkReminders(entries, config);
+    Alert.alert(
+      result?.fired ? 'Reminder Sent' : 'No Reminder Due',
+      result?.reason || 'Unknown.'
+    );
+  };
+
   const handleTrendsExportPDF = async (days) => {
     const end = new Date().toISOString().split('T')[0];
     const startObj = new Date();
@@ -160,7 +232,14 @@ export default function App() {
           onOpenExport={() => setIsExportOpen(true)}
           onOpenConfig={() => setIsConfigOpen(true)}
           onGoTrends={() => setView('trends')}
-          onOpenEntry={() => setView('entry')}
+          onOpenEntry={() => {
+            setEditingEntry(null);
+            setView('entry');
+          }}
+          onEditEntry={(item) => {
+            setEditingEntry(item);
+            setView('entry');
+          }}
           onDeleteEntry={handleDeleteEntry}
           onToggleHideEntry={handleToggleHideEntry}
         />
@@ -171,15 +250,23 @@ export default function App() {
           entries={entries}
           onExportPDF={handleTrendsExportPDF}
           onGoLog={() => setView('log')}
-          onGoEntry={() => setView('entry')}
+          onGoEntry={() => {
+            setEditingEntry(null);
+            setView('entry');
+          }}
         />
       )}
 
       {view === 'entry' && (
         <NewEntryView
           existingEntries={entries}
+          editingEntry={editingEntry}
           onSave={handleSaveEntry}
-          onCancel={() => setView('log')}
+          onCancel={() => {
+            setEditingEntry(null);
+            setView('log');
+          }}
+          onImportMySugr={handleImportMySugr}
         />
       )}
 
@@ -195,6 +282,8 @@ export default function App() {
         config={config}
         onClose={() => setIsConfigOpen(false)}
         onSaveConfig={handleSaveConfig}
+        onSendTestNotification={handleSendTestNotification}
+        onCheckRemindersNow={handleCheckRemindersNow}
       />
     </SafeAreaView>
   );
