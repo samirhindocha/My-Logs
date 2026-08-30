@@ -34,11 +34,16 @@ export const setupNotifications = async () => {
   }
 };
 
+const CORE_SLOTS = ['Fasting', 'Before Lunch', 'After Lunch 2hr', 'Before Dinner', 'After Dinner', '3 AM'];
+
 const presentNotification = async (title, body) => {
   try {
     await Notifications.scheduleNotificationAsync({
       content: { title, body },
-      trigger: null,
+      // A plain `null` trigger fires immediately but on Android lands on whichever
+      // channel the OS improvises; pairing it with our channel id keeps it on the
+      // HIGH-importance "reminders" channel set up in setupNotifications().
+      trigger: Platform.OS === 'android' ? { channelId: 'reminders' } : null,
     });
   } catch (err) {
     console.warn('Notification error:', err);
@@ -64,21 +69,48 @@ export const checkReminders = async (entries = [], config = DEFAULT_CONFIG) => {
     }
   }
 
+  if (entries.length === 0) return;
+
   // 2. Missing slot check (e.g. Fasting missing for X days)
   const thresholdDays = parseInt(config.missingSlotDaysThreshold, 10) || 20;
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - thresholdDays);
   const cutoffStr = cutoff.toISOString().split('T')[0];
 
-  const coreSlots = ['Fasting', 'Before Lunch', 'After Lunch 2hr', 'Before Dinner', 'After Dinner', '3 AM'];
-  for (const slotName of coreSlots) {
-    const hasLog = entries.some((e) => e.slot === slotName && e.date >= cutoffStr && !e.hidden);
-    if (!hasLog && entries.length > 0) {
-      await presentNotification(
-        '⚠️ Missing Log Reminder',
-        `You have not logged any "${slotName}" reading in the last ${thresholdDays} days.`
-      );
-      break;
-    }
+  const missingSlot = CORE_SLOTS.find(
+    (slotName) => !entries.some((e) => e.slot === slotName && e.date >= cutoffStr && !e.hidden)
+  );
+  if (missingSlot) {
+    await presentNotification(
+      '⚠️ Missing Log Reminder',
+      `You have not logged any "${missingSlot}" reading in the last ${thresholdDays} days.`
+    );
+    return;
+  }
+
+  // 3. Six-report full-day check reminder (all 6 core slots logged on the same day)
+  const sixReportsDays = parseInt(config.sixReportsReminderDays, 10) || 14;
+  const slotsLoggedByDate = {};
+  entries.forEach((e) => {
+    if (e.hidden || !CORE_SLOTS.includes(e.slot)) return;
+    if (!slotsLoggedByDate[e.date]) slotsLoggedByDate[e.date] = new Set();
+    slotsLoggedByDate[e.date].add(e.slot);
+  });
+  const lastCompleteDate = Object.keys(slotsLoggedByDate)
+    .filter((date) => CORE_SLOTS.every((slot) => slotsLoggedByDate[date].has(slot)))
+    .sort()
+    .pop();
+
+  const daysSinceComplete = lastCompleteDate
+    ? Math.floor((Date.now() - new Date(lastCompleteDate).getTime()) / (1000 * 86400))
+    : Infinity;
+
+  if (daysSinceComplete >= sixReportsDays) {
+    await presentNotification(
+      '📋 Full 6-Point Check Reminder',
+      lastCompleteDate
+        ? `It has been ${daysSinceComplete} days since your last complete 6-point check (${lastCompleteDate}). Try logging a full day soon.`
+        : `You haven't completed a full 6-point check yet. Try logging Fasting, Before Lunch, After Lunch, Before Dinner, After Dinner, and 3 AM all on the same day.`
+    );
   }
 };

@@ -74,7 +74,7 @@ const buildExportMatrix = (entries, startDate, endDate) => {
   });
 
   return Object.keys(byDate)
-    .sort((a, b) => a.localeCompare(b))
+    .sort((a, b) => b.localeCompare(a))
     .map((d) => {
       const r = byDate[d];
       const units = [];

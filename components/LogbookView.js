@@ -109,6 +109,17 @@ Before Dinner: ${pmDose}`;
     }
   };
 
+  const handleDeletePress = (id) => {
+    Alert.alert(
+      'Delete Record',
+      'Are you sure you want to delete this record?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => onDeleteEntry(id) },
+      ]
+    );
+  };
+
   return (
     <View style={styles.flexOne}>
       {/* Top Header */}
@@ -218,7 +229,7 @@ Before Dinner: ${pmDose}`;
                         <TouchableOpacity style={styles.actionBtn} onPress={() => onToggleHideEntry(item.id)}>
                           <Text style={styles.actionIcon}>{item.hidden ? '🚫' : '👁'}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.actionBtn} onPress={() => onDeleteEntry(item.id)}>
+                        <TouchableOpacity style={styles.actionBtn} onPress={() => handleDeletePress(item.id)}>
                           <Text style={styles.actionIcon}>🗑</Text>
                         </TouchableOpacity>
                       </View>

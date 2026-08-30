@@ -20,6 +20,7 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
   const [selectedSlot, setSelectedSlot] = useState('Fasting');
   const [customLabel, setCustomLabel] = useState('');
   const [customTime, setCustomTime] = useState('10:30');
+  const [customPeriod, setCustomPeriod] = useState('AM');
 
   const [focusField, setFocusField] = useState('reading');
   const [reading, setReading] = useState('');
@@ -77,7 +78,13 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
         }
 
         setReading(parsed.reading);
-        if (parsed.time && selectedSlot === 'Custom') setCustomTime(parsed.time);
+        if (parsed.time && selectedSlot === 'Custom') {
+          const timeMatch = parsed.time.match(/^(\d{1,2}:\d{2})\s*(AM|PM)$/i);
+          if (timeMatch) {
+            setCustomTime(timeMatch[1]);
+            setCustomPeriod(timeMatch[2].toUpperCase());
+          }
+        }
         if (parsed.date) {
           const d = new Date(parsed.date);
           if (!isNaN(d.getTime())) setSelectedDate(d);
@@ -144,7 +151,7 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
         id: existingIndex >= 0 ? existingEntries[existingIndex].id : Date.now().toString(),
         date: dateStr,
         slot: finalSlot,
-        time: selectedSlot === 'Custom' ? customTime : '',
+        time: selectedSlot === 'Custom' ? `${customTime} ${customPeriod}` : '',
         reading: parseFloat(reading),
         isExtremeLow,
         isExtremeHigh,
@@ -239,6 +246,19 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel })
                 onChangeText={setCustomTime}
                 placeholder="10:30"
               />
+              <View style={styles.periodToggle}>
+                {['AM', 'PM'].map((period) => (
+                  <TouchableOpacity
+                    key={period}
+                    style={[styles.periodOptionBtn, customPeriod === period && styles.periodOptionBtnActive]}
+                    onPress={() => setCustomPeriod(period)}
+                  >
+                    <Text style={[styles.periodOptionBtnText, customPeriod === period && styles.periodOptionBtnTextActive]}>
+                      {period}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           </View>
         )}
@@ -413,6 +433,11 @@ const styles = StyleSheet.create({
   customTimeRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 10 },
   customTimeLabel: { fontSize: 12.5, fontWeight: '600', color: '#3D4C47' },
   customTimeInput: { flex: 1, backgroundColor: '#FBF9F4', borderWidth: 1, borderColor: 'rgba(20,32,28,0.12)', borderRadius: 8, padding: 6, fontSize: 13, fontWeight: '600' },
+  periodToggle: { flexDirection: 'row', backgroundColor: '#FBF9F4', borderWidth: 1, borderColor: 'rgba(20,32,28,0.12)', borderRadius: 8, padding: 2, gap: 2 },
+  periodOptionBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
+  periodOptionBtnActive: { backgroundColor: '#0D6E5E' },
+  periodOptionBtnText: { fontSize: 12, fontWeight: '700', color: '#3D4C47' },
+  periodOptionBtnTextActive: { color: '#EAF6F2' },
   readingCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderRadius: 18, padding: 14, borderWidth: 1.5, borderColor: 'rgba(20,32,28,0.08)' },
   readingValRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
   readingValue: { fontSize: 32, fontWeight: '800', color: '#14201C' },

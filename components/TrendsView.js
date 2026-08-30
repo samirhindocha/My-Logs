@@ -11,12 +11,40 @@ import { SLOTS } from '../constants/theme';
 import { getReadingStatus } from '../utils/storage';
 
 const PERIOD_OPTIONS = [
+  { label: 'Today', days: 0 },
+  { label: 'Last 5 days', days: 5 },
   { label: 'Last 7 days', days: 7 },
   { label: 'Last 15 days', days: 15 },
   { label: 'Last 1 month', days: 30 },
   { label: 'Last 2 months', days: 60 },
   { label: 'Last 3 months', days: 90 },
 ];
+
+const CHRONO_SLOTS = SLOTS.filter((s) => s.name !== 'Custom').map((s) => s.name);
+
+const SLOT_AXIS_LABEL = {
+  Fasting: 'Fast',
+  'Before Lunch': 'B.Lunch',
+  'After Lunch 2hr': 'A.Lunch',
+  'Before Dinner': 'B.Din',
+  'After Dinner': 'A.Din',
+  '3 AM': '3AM',
+};
+
+// Fraction (0-1) of a day's chronological order for a slot-based entry, used to
+// position "Today" readings along the X axis since they all share one calendar date.
+const timeOfDayFraction = (item) => {
+  if (item.slot === 'Custom' && item.time) {
+    const match = item.time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (match) {
+      let hours = parseInt(match[1], 10) % 12;
+      if (/pm/i.test(match[3])) hours += 12;
+      return (hours * 60 + parseInt(match[2], 10)) / 1440;
+    }
+  }
+  const idx = CHRONO_SLOTS.indexOf(item.slot);
+  return idx >= 0 ? idx / (CHRONO_SLOTS.length - 1) : 0.5;
+};
 
 const Y_AXIS_LEVELS = [250, 200, 140, 100, 70];
 const Y_AXIS_WIDTH = 30;
@@ -28,7 +56,7 @@ const formatAxisDate = (dateStr) => {
 };
 
 export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
-  const [selectedPeriod, setSelectedPeriod] = useState(PERIOD_OPTIONS[4]); // Default: Last 3 months
+  const [selectedPeriod, setSelectedPeriod] = useState(PERIOD_OPTIONS[0]); // Default: Today
   const [periodPickerOpen, setPeriodPickerOpen] = useState(false);
   const [plotWidth, setPlotWidth] = useState(0);
 
@@ -86,6 +114,7 @@ export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
   // X axis runs along the real calendar timeline, from the start of the selected
   // period through to today — so the plot always extends up to "today", even if
   // the most recent reading was logged a few days ago.
+  const isTodayView = selectedPeriod.days === 0;
   const periodStartMs = cutoffDate.getTime();
   const todayMs = now.getTime();
   const totalRangeMs = Math.max(1, todayMs - periodStartMs);
@@ -95,11 +124,18 @@ export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
     const ratio = Math.min(1, Math.max(0, (t - periodStartMs) / totalRangeMs));
     return 6 + ratio * usableWidth;
   };
+  // "Today" has just one calendar date for every reading, so position by the
+  // slot's chronological order (or actual time for a Custom entry) instead.
+  const getXForItem = (item) => {
+    if (!isTodayView) return getX(item.date);
+    const usableWidth = Math.max(0, plotWidth - 12);
+    return 6 + timeOfDayFraction(item) * usableWidth;
+  };
 
   const chartPoints = allReadings.map((item) => {
     const y = getY(Number(item.reading));
     return {
-      x: getX(item.date),
+      x: getXForItem(item),
       y: Math.max(8, Math.min(chartHeight - 8, y)),
       reading: item.reading,
       slot: item.slot,
@@ -121,13 +157,19 @@ export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
     return { left: midX - length / 2, top: midY - LINE_THICKNESS / 2, length, angle };
   });
 
-  // Evenly-spaced date labels along the bottom axis, spanning the period start through today
-  const xAxisLabelCount = 5;
-  const xAxisLabels = Array.from({ length: xAxisLabelCount }, (_, i) => {
-    const t = periodStartMs + (i / (xAxisLabelCount - 1)) * totalRangeMs;
-    const dateStr = new Date(t).toISOString().split('T')[0];
-    return { x: getX(dateStr), text: formatAxisDate(dateStr) };
-  });
+  // Bottom axis labels: slot names for "Today", otherwise evenly-spaced dates
+  // spanning the period start through today.
+  const usableWidth = Math.max(0, plotWidth - 12);
+  const xAxisLabels = isTodayView
+    ? CHRONO_SLOTS.map((slotName, idx) => ({
+        x: 6 + (idx / (CHRONO_SLOTS.length - 1)) * usableWidth,
+        text: SLOT_AXIS_LABEL[slotName] || slotName,
+      }))
+    : Array.from({ length: 5 }, (_, i) => {
+        const t = periodStartMs + (i / 4) * totalRangeMs;
+        const dateStr = new Date(t).toISOString().split('T')[0];
+        return { x: getX(dateStr), text: formatAxisDate(dateStr) };
+      });
 
   return (
     <View style={styles.flexOne}>
