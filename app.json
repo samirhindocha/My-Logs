@@ -2,7 +2,7 @@
   "expo": {
     "name": "Log Buddy",
     "slug": "my-logs",
-    "owner": "samirhindochas-team",
+    "owner": "sameerhindochas-team",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -25,7 +25,7 @@
     },
     "extra": {
       "eas": {
-        "projectId": "3345e9cd-f999-4fad-975f-e9b1e7109914"
+        "projectId": "914934a0-1ac9-4405-b775-a5805c6b86a1"
       }
     },
     "plugins": [
