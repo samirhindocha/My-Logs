@@ -2,9 +2,21 @@
 //
 // mySugr logs a raw date+time+value per reading with no meal-time tag, while
 // this app organizes entries by meal slot (Fasting, Before Lunch, ...). Since
-// there's no reliable tag to go on, the slot is *guessed* from a set of narrow
-// time-of-day windows; anything outside those windows is left as "Custom" —
-// callers should tell the user these are best-effort guesses, not authoritative.
+// there's no reliable tag to go on, the slot is *guessed* from a set of narrow,
+// user-configurable time-of-day windows; anything outside those windows is left
+// as "Custom" — callers should tell the user these are best-effort guesses.
+import { SLOTS } from '../constants/theme';
+
+const CORE_SLOT_NAMES = SLOTS.filter((s) => s.name !== 'Custom').map((s) => s.name);
+
+export const DEFAULT_SLOT_TIME_WINDOWS = {
+  Fasting: { start: '07:00', end: '10:00' },
+  'Before Lunch': { start: '12:00', end: '14:00' },
+  'After Lunch 2hr': { start: '14:00', end: '17:30' },
+  'Before Dinner': { start: '20:30', end: '22:00' },
+  'After Dinner': { start: '23:00', end: '00:30' },
+  '3 AM': { start: '02:30', end: '03:30' },
+};
 
 const MONTHS = {
   jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
@@ -76,23 +88,35 @@ const parseMySugrTime = (str) => {
   return { display: `${hour12}:${match[2]} ${period}`, totalMinutes: hour24 * 60 + minute };
 };
 
-// Best-effort meal-slot guess from time of day — mySugr gives us no real tag to go on.
-// Anything outside these windows is left as "Custom" rather than forced into a slot.
-const inWindow = (t, startMinutes, endMinutes) => t >= startMinutes && t < endMinutes;
+// "07:00" -> 420 (minutes since midnight)
+const parseHHMM = (str) => {
+  const match = (str || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+};
 
-const guessSlotFromMinutes = (totalMinutes) => {
-  if (inWindow(totalMinutes, 2 * 60 + 30, 3 * 60 + 30)) return '3 AM'; // 2:30 - 3:30 AM
-  if (inWindow(totalMinutes, 7 * 60, 10 * 60)) return 'Fasting'; // 7:00 - 10:00 AM
-  if (inWindow(totalMinutes, 12 * 60, 14 * 60)) return 'Before Lunch'; // 12:00 - 2:00 PM
-  if (inWindow(totalMinutes, 14 * 60, 17 * 60 + 30)) return 'After Lunch 2hr'; // 2:00 - 5:30 PM
-  if (inWindow(totalMinutes, 20 * 60 + 30, 22 * 60)) return 'Before Dinner'; // 8:30 - 10:00 PM
-  if (totalMinutes >= 23 * 60 || totalMinutes < 30) return 'After Dinner'; // 11:00 PM - 12:30 AM
+const inWindow = (t, startMinutes, endMinutes) => {
+  if (startMinutes <= endMinutes) return t >= startMinutes && t < endMinutes;
+  return t >= startMinutes || t < endMinutes; // window wraps past midnight
+};
+
+// Best-effort meal-slot guess from time of day, using the (possibly user-edited)
+// slot time windows. Anything outside every window is left as "Custom".
+const guessSlotFromMinutes = (totalMinutes, windows) => {
+  for (const slotName of CORE_SLOT_NAMES) {
+    const win = windows?.[slotName];
+    if (!win) continue;
+    const start = parseHHMM(win.start);
+    const end = parseHHMM(win.end);
+    if (start == null || end == null) continue;
+    if (inWindow(totalMinutes, start, end)) return slotName;
+  }
   return 'Custom';
 };
 
 // Parses a mySugr CSV export into app-ready entry objects.
 // Returns { entries, skipped } — skipped counts rows with no usable date/reading.
-export const parseMySugrCsv = (csvText) => {
+export const parseMySugrCsv = (csvText, slotTimeWindows = DEFAULT_SLOT_TIME_WINDOWS) => {
   const rows = parseCsv(csvText || '');
   if (rows.length < 2) return { entries: [], skipped: 0 };
 
@@ -119,7 +143,7 @@ export const parseMySugrCsv = (csvText) => {
     }
 
     const time = timeCol >= 0 ? parseMySugrTime(cols[timeCol]) : null;
-    const slot = time ? guessSlotFromMinutes(time.totalMinutes) : 'Custom';
+    const slot = time ? guessSlotFromMinutes(time.totalMinutes, slotTimeWindows) : 'Custom';
 
     entries.push({
       date,
@@ -132,6 +156,7 @@ export const parseMySugrCsv = (csvText) => {
       pm: '',
       extra: '',
       hidden: false,
+      source: 'mysugr',
     });
   }
 

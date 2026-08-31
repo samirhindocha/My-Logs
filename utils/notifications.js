@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { DEFAULT_SLOT_TIME_WINDOWS } from './mySugrImport';
 
 export const CONFIG_STORAGE_KEY = '@my_logs_app_config_v1';
 
@@ -7,6 +8,7 @@ export const DEFAULT_CONFIG = {
   lastDoctorAppointment: '',
   missingSlotDaysThreshold: '10',
   sixReportsReminderDays: '15',
+  slotTimeWindows: DEFAULT_SLOT_TIME_WINDOWS,
 };
 
 Notifications.setNotificationHandler({

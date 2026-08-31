@@ -152,7 +152,7 @@ export default function App() {
       if (picked.canceled || !picked.assets || !picked.assets.length) return;
 
       const csvText = await new File(picked.assets[0].uri).text();
-      const { entries: parsed, skipped } = parseMySugrCsv(csvText);
+      const { entries: parsed, skipped } = parseMySugrCsv(csvText, config.slotTimeWindows);
 
       if (!parsed.length) {
         Alert.alert('Import Failed', 'Could not find any readings in that file. Make sure it\'s a mySugr CSV export.');

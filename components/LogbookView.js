@@ -13,6 +13,9 @@ import {
 import { SLOTS } from '../constants/theme';
 import { formatDateHeader, getReadingStatus } from '../utils/storage';
 
+const CORE_SLOT_NAMES = SLOTS.filter((s) => s.name !== 'Custom').map((s) => s.name);
+const FILTER_OPTIONS = ['All', ...CORE_SLOT_NAMES, 'Other'];
+
 export default function LogbookView({
   entries = [],
   onOpenExport,
@@ -25,9 +28,17 @@ export default function LogbookView({
 }) {
   const [selectedAvgSlot, setSelectedAvgSlot] = useState('Fasting');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [slotFilter, setSlotFilter] = useState('All');
+
+  const filteredEntries =
+    slotFilter === 'All'
+      ? entries
+      : slotFilter === 'Other'
+      ? entries.filter((e) => !CORE_SLOT_NAMES.includes(e.slot))
+      : entries.filter((e) => e.slot === slotFilter);
 
   const byDate = {};
-  entries.forEach((e) => {
+  filteredEntries.forEach((e) => {
     byDate[e.date] = byDate[e.date] || [];
     byDate[e.date].push(e);
   });
@@ -176,12 +187,33 @@ Before Dinner: ${pmDose}`;
         </View>
       </View>
 
+      {/* Slot Filter Chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+      >
+        {FILTER_OPTIONS.map((opt) => (
+          <TouchableOpacity
+            key={opt}
+            style={[styles.filterChip, slotFilter === opt && styles.filterChipActive]}
+            onPress={() => setSlotFilter(opt)}
+          >
+            <Text style={[styles.filterChipText, slotFilter === opt && styles.filterChipTextActive]}>
+              {opt}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
       {/* Day Groups List */}
       <ScrollView contentContainerStyle={styles.listContent}>
-        {entries.length === 0 ? (
+        {dateKeys.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>No logs yet</Text>
-            <Text style={styles.emptySub}>Tap '+' below to add your first reading</Text>
+            <Text style={styles.emptyTitle}>{entries.length === 0 ? 'No logs yet' : 'No matching records'}</Text>
+            <Text style={styles.emptySub}>
+              {entries.length === 0 ? "Tap '+' below to add your first reading" : 'Try a different filter'}
+            </Text>
           </View>
         ) : (
           dateKeys.map((dateStr) => {
@@ -213,7 +245,12 @@ Before Dinner: ${pmDose}`;
                     <View key={item.id} style={[styles.card, item.hidden && styles.cardHidden]}>
                       <View style={[styles.colorDot, { backgroundColor: status.color }]} />
                       <View style={styles.cardMain}>
-                        <Text style={styles.cardTitle}>{item.slot}</Text>
+                        <View style={styles.cardTitleRow}>
+                          <Text style={styles.cardTitle}>{item.slot}</Text>
+                          {item.source === 'mysugr' && (
+                            <Text style={styles.importBadge}>📥</Text>
+                          )}
+                        </View>
                         <Text style={styles.cardMeta}>
                           {doseMeta.length ? doseMeta.join('  ·  ') : 'No dose recorded'}
                         </Text>
@@ -318,7 +355,12 @@ const styles = StyleSheet.create({
   unitsSplitLabel: { fontSize: 10, fontWeight: '600', color: '#8B9A94', marginTop: 1 },
   unitsSplitDivider: { width: 1, height: 26, backgroundColor: 'rgba(20,32,28,0.09)' },
   rowBaseline: { flexDirection: 'row', alignItems: 'baseline', marginTop: 4 },
-  listContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 110 },
+  filterRow: { paddingHorizontal: 20, paddingTop: 14, gap: 8 },
+  filterChip: { backgroundColor: '#fff', borderWidth: 1, borderColor: 'rgba(20,32,28,0.12)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
+  filterChipActive: { backgroundColor: '#0D6E5E', borderColor: '#0D6E5E' },
+  filterChipText: { fontSize: 12, fontWeight: '700', color: '#3D4C47' },
+  filterChipTextActive: { color: '#EAF6F2' },
+  listContent: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 110 },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: '#14201C', marginBottom: 4 },
   emptySub: { fontSize: 13, color: '#8B9A94' },
@@ -332,7 +374,9 @@ const styles = StyleSheet.create({
   cardHidden: { opacity: 0.4, backgroundColor: '#F0EDE5' },
   colorDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
   cardMain: { flex: 1, minWidth: 0 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   cardTitle: { fontSize: 14, fontWeight: '700', letterSpacing: -0.1, color: '#14201C' },
+  importBadge: { fontSize: 9 },
   cardMeta: { fontSize: 11, fontWeight: '500', color: '#8B9A94', marginTop: 2 },
   cardRight: { alignItems: 'flex-end' },
   cardValue: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
