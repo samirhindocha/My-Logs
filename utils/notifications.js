@@ -67,11 +67,15 @@ const presentNotification = async (title, body) => {
 export const sendTestNotification = () =>
   presentNotification('🔔 Test Notification', 'If you see this, notifications are working correctly.');
 
-// Checks reminder conditions and posts a native notification (phone's notification panel)
-// when due. Always returns { fired, reason } describing what it found — silent auto-run
-// call sites can ignore this, but it lets a manual "Check Now" button explain a no-op.
+// Checks all reminder conditions and posts a native notification (phone's notification
+// panel) for EVERY one that's currently due — not just the first it finds. Always returns
+// { fired, reason } summarizing what it found (reason lists every check's outcome), so a
+// manual "Check Now" button can explain a no-op as well as confirm what fired.
 export const checkReminders = async (entries = [], config = DEFAULT_CONFIG) => {
   if (!entries || !config) return { fired: false, reason: 'No entries or config.' };
+
+  const fired = [];
+  const notes = [];
 
   // 1. Doctor Appointment Check (at 2.5 months / 75 days)
   if (config.lastDoctorAppointment) {
@@ -83,12 +87,15 @@ export const checkReminders = async (entries = [], config = DEFAULT_CONFIG) => {
           '🩺 Doctor Appointment Reminder',
           `It has been ${diffDays} days since your last appointment (${config.lastDoctorAppointment}). Please schedule your next visit.`
         );
-        return { fired: true, reason: 'Doctor appointment overdue.' };
+        fired.push('Doctor appointment overdue.');
       }
     }
   }
 
-  if (entries.length === 0) return { fired: false, reason: 'No entries logged yet.' };
+  if (entries.length === 0) {
+    notes.push('No entries logged yet.');
+    return { fired: fired.length > 0, reason: [...fired, ...notes].join('\n') };
+  }
 
   // 2. Missing slot check (e.g. Fasting missing for X days)
   const thresholdDays = parseInt(config.missingSlotDaysThreshold, 10) || 20;
@@ -104,7 +111,9 @@ export const checkReminders = async (entries = [], config = DEFAULT_CONFIG) => {
       '⚠️ Missing Log Reminder',
       `You have not logged any "${missingSlot}" reading in the last ${thresholdDays} days.`
     );
-    return { fired: true, reason: `"${missingSlot}" missing for ${thresholdDays}+ days.` };
+    fired.push(`"${missingSlot}" missing for ${thresholdDays}+ days.`);
+  } else {
+    notes.push(`Every core slot logged within ${thresholdDays} days.`);
   }
 
   // 3. Six-report full-day check reminder (all 6 core slots logged on the same day)
@@ -131,18 +140,18 @@ export const checkReminders = async (entries = [], config = DEFAULT_CONFIG) => {
         ? `It has been ${daysSinceComplete} days since your last complete 6-point check (${lastCompleteDate}). Try logging a full day soon.`
         : `You haven't completed a full 6-point check yet. Try logging Fasting, Before Lunch, After Lunch, Before Dinner, After Dinner, and 3 AM all on the same day.`
     );
-    return {
-      fired: true,
-      reason: lastCompleteDate
+    fired.push(
+      lastCompleteDate
         ? `No complete 6-point day in ${daysSinceComplete}+ days (last: ${lastCompleteDate}).`
-        : 'No complete 6-point day ever logged.',
-    };
+        : 'No complete 6-point day ever logged.'
+    );
+  } else {
+    notes.push(
+      `Complete 6-point day within the last ${sixReportsDays} days${
+        lastCompleteDate ? ` (last: ${lastCompleteDate}, ${daysSinceComplete}d ago)` : ''
+      }.`
+    );
   }
 
-  return {
-    fired: false,
-    reason: `All good: every core slot logged within ${thresholdDays} days, and a complete 6-point day within the last ${sixReportsDays} days${
-      lastCompleteDate ? ` (last: ${lastCompleteDate}, ${daysSinceComplete}d ago)` : ''
-    }.`,
-  };
+  return { fired: fired.length > 0, reason: [...fired, ...notes].join('\n') };
 };

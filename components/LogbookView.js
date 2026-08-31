@@ -3,7 +3,7 @@ import {
   StyleSheet,
   Text,
   View,
-  ScrollView,
+  SectionList,
   TouchableOpacity,
   Modal,
   Alert,
@@ -29,6 +29,7 @@ export default function LogbookView({
   const [selectedAvgSlot, setSelectedAvgSlot] = useState('Fasting');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [slotFilter, setSlotFilter] = useState('All');
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
 
   const filteredEntries =
     slotFilter === 'All'
@@ -43,6 +44,7 @@ export default function LogbookView({
     byDate[e.date].push(e);
   });
   const dateKeys = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+  const sections = dateKeys.map((dateStr) => ({ dateStr, data: byDate[dateStr] }));
 
   // Dynamic slot average
   const slotMatches = entries.filter(
@@ -144,6 +146,10 @@ Before Dinner: ${pmDose}`;
           <TouchableOpacity style={styles.configBtn} onPress={onOpenConfig}>
             <Text style={styles.configIcon}>⚙️</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.configBtn} onPress={() => setFilterModalOpen(true)}>
+            <Text style={styles.configIcon}>🔽</Text>
+            {slotFilter !== 'All' && <View style={styles.filterActiveDot} />}
+          </TouchableOpacity>
           <TouchableOpacity style={styles.exportBtn} onPress={onOpenExport}>
             <Text style={styles.exportIcon}>⤓</Text>
             <Text style={styles.exportBtnText}>Export</Text>
@@ -187,101 +193,85 @@ Before Dinner: ${pmDose}`;
         </View>
       </View>
 
-      {/* Slot Filter Chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterRow}
-      >
-        {FILTER_OPTIONS.map((opt) => (
-          <TouchableOpacity
-            key={opt}
-            style={[styles.filterChip, slotFilter === opt && styles.filterChipActive]}
-            onPress={() => setSlotFilter(opt)}
-          >
-            <Text style={[styles.filterChipText, slotFilter === opt && styles.filterChipTextActive]}>
-              {opt}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Day Groups List */}
-      <ScrollView contentContainerStyle={styles.listContent}>
-        {dateKeys.length === 0 ? (
+      {/* Day Groups List — virtualized so a large mySugr import doesn't render
+          hundreds of cards eagerly (that was crashing the app on big imports) */}
+      <SectionList
+        style={styles.listFlex}
+        contentContainerStyle={styles.listContent}
+        sections={sections}
+        keyExtractor={(item) => item.id}
+        stickySectionHeadersEnabled={false}
+        initialNumToRender={20}
+        windowSize={7}
+        maxToRenderPerBatch={20}
+        removeClippedSubviews={Platform.OS === 'android'}
+        ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>{entries.length === 0 ? 'No logs yet' : 'No matching records'}</Text>
             <Text style={styles.emptySub}>
               {entries.length === 0 ? "Tap '+' below to add your first reading" : 'Try a different filter'}
             </Text>
           </View>
-        ) : (
-          dateKeys.map((dateStr) => {
-            const items = byDate[dateStr];
-            return (
-              <View key={dateStr} style={styles.dateGroup}>
-                <View style={styles.dateGroupHeader}>
-                  <Text style={styles.dateGroupTitle}>{formatDateHeader(dateStr)}</Text>
-                  <View style={styles.divider} />
-                  <TouchableOpacity
-                    style={styles.dayExportBtn}
-                    onPress={() => handleExportSingleDay(dateStr)}
-                  >
-                    <Text style={styles.dayExportText}>📄 Export Day</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {items.map((item) => {
-                  const status = getReadingStatus(item.reading, item.isExtremeLow, item.isExtremeHigh);
-                  const doseMeta = [];
-                  if (item.time) doseMeta.push(item.time);
-                  if (item.am) doseMeta.push(`${item.am}u AM`);
-                  if (item.pm) doseMeta.push(`${item.pm}u PM`);
-                  if (item.extra) doseMeta.push(`${item.extra}u Ext`);
-
-                  const displayVal = item.reading;
-
-                  return (
-                    <View key={item.id} style={[styles.card, item.hidden && styles.cardHidden]}>
-                      <View style={[styles.colorDot, { backgroundColor: status.color }]} />
-                      <View style={styles.cardMain}>
-                        <View style={styles.cardTitleRow}>
-                          <Text style={styles.cardTitle}>{item.slot}</Text>
-                          {item.source === 'mysugr' && (
-                            <Text style={styles.importBadge}>📥</Text>
-                          )}
-                        </View>
-                        <Text style={styles.cardMeta}>
-                          {doseMeta.length ? doseMeta.join('  ·  ') : 'No dose recorded'}
-                        </Text>
-                      </View>
-
-                      <View style={styles.cardRight}>
-                        <Text style={[styles.cardValue, { color: status.color }]}>
-                          {displayVal}
-                        </Text>
-                        <Text style={styles.cardStatus}>{status.text}</Text>
-                      </View>
-
-                      <View style={styles.actionColumn}>
-                        <TouchableOpacity style={styles.actionBtn} onPress={() => onEditEntry(item)}>
-                          <Text style={styles.actionIcon}>✏️</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.actionBtn} onPress={() => onToggleHideEntry(item.id)}>
-                          <Text style={styles.actionIcon}>{item.hidden ? '🚫' : '👁'}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.actionBtn} onPress={() => handleDeletePress(item.id)}>
-                          <Text style={styles.actionIcon}>🗑</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            );
-          })
+        }
+        renderSectionHeader={({ section: { dateStr } }) => (
+          <View style={styles.dateGroupHeader}>
+            <Text style={styles.dateGroupTitle}>{formatDateHeader(dateStr)}</Text>
+            <View style={styles.divider} />
+            <TouchableOpacity
+              style={styles.dayExportBtn}
+              onPress={() => handleExportSingleDay(dateStr)}
+            >
+              <Text style={styles.dayExportText}>📄 Export Day</Text>
+            </TouchableOpacity>
+          </View>
         )}
-      </ScrollView>
+        renderItem={({ item }) => {
+          const status = getReadingStatus(item.reading, item.isExtremeLow, item.isExtremeHigh);
+          const doseMeta = [];
+          if (item.time) doseMeta.push(item.time);
+          if (item.am) doseMeta.push(`${item.am}u AM`);
+          if (item.pm) doseMeta.push(`${item.pm}u PM`);
+          if (item.extra) doseMeta.push(`${item.extra}u Ext`);
+
+          const displayVal = item.reading;
+
+          return (
+            <View style={[styles.card, item.hidden && styles.cardHidden]}>
+              <View style={[styles.colorDot, { backgroundColor: status.color }]} />
+              <View style={styles.cardMain}>
+                <View style={styles.cardTitleRow}>
+                  <Text style={styles.cardTitle}>{item.slot}</Text>
+                  {item.source === 'mysugr' && (
+                    <Text style={styles.importBadge}>📥</Text>
+                  )}
+                </View>
+                <Text style={styles.cardMeta}>
+                  {doseMeta.length ? doseMeta.join('  ·  ') : 'No dose recorded'}
+                </Text>
+              </View>
+
+              <View style={styles.cardRight}>
+                <Text style={[styles.cardValue, { color: status.color }]}>
+                  {displayVal}
+                </Text>
+                <Text style={styles.cardStatus}>{status.text}</Text>
+              </View>
+
+              <View style={styles.actionColumn}>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => onEditEntry(item)}>
+                  <Text style={styles.actionIcon}>✏️</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => onToggleHideEntry(item.id)}>
+                  <Text style={styles.actionIcon}>{item.hidden ? '🚫' : '👁'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => handleDeletePress(item.id)}>
+                  <Text style={styles.actionIcon}>🗑</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        }}
+      />
 
       {/* Avg Slot Picker Modal */}
       <Modal visible={pickerOpen} transparent animationType="fade">
@@ -299,6 +289,29 @@ Before Dinner: ${pmDose}`;
               >
                 <Text style={[styles.pickerOptionText, selectedAvgSlot === s.name && styles.pickerOptionTextActive]}>
                   {s.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Filter Modal */}
+      <Modal visible={filterModalOpen} transparent animationType="fade">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setFilterModalOpen(false)}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Filter Logbook</Text>
+            {FILTER_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt}
+                style={[styles.pickerOption, slotFilter === opt && styles.pickerOptionActive]}
+                onPress={() => {
+                  setSlotFilter(opt);
+                  setFilterModalOpen(false);
+                }}
+              >
+                <Text style={[styles.pickerOptionText, slotFilter === opt && styles.pickerOptionTextActive]}>
+                  {opt}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -328,8 +341,9 @@ const styles = StyleSheet.create({
   flexOne: { flex: 1, backgroundColor: '#FBF9F4' },
   header: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 14, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  configBtn: { backgroundColor: '#F0EDE5', padding: 8, borderRadius: 12 },
+  configBtn: { backgroundColor: '#F0EDE5', padding: 8, borderRadius: 12, position: 'relative' },
   configIcon: { fontSize: 16 },
+  filterActiveDot: { position: 'absolute', top: 5, right: 5, width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#0D6E5E', borderWidth: 1.5, borderColor: '#F0EDE5' },
   appSubtitle: { fontSize: 11, fontWeight: '700', letterSpacing: 1.4, textTransform: 'uppercase', color: '#8B9A94' },
   appTitle: { fontSize: 27, fontWeight: '800', letterSpacing: -0.5, color: '#14201C', marginTop: 3 },
   exportBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0D6E5E', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, gap: 5 },
@@ -355,17 +369,12 @@ const styles = StyleSheet.create({
   unitsSplitLabel: { fontSize: 10, fontWeight: '600', color: '#8B9A94', marginTop: 1 },
   unitsSplitDivider: { width: 1, height: 26, backgroundColor: 'rgba(20,32,28,0.09)' },
   rowBaseline: { flexDirection: 'row', alignItems: 'baseline', marginTop: 4 },
-  filterRow: { paddingHorizontal: 20, paddingTop: 14, gap: 8 },
-  filterChip: { backgroundColor: '#fff', borderWidth: 1, borderColor: 'rgba(20,32,28,0.12)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20 },
-  filterChipActive: { backgroundColor: '#0D6E5E', borderColor: '#0D6E5E' },
-  filterChipText: { fontSize: 12, fontWeight: '700', color: '#3D4C47' },
-  filterChipTextActive: { color: '#EAF6F2' },
-  listContent: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 110 },
+  listFlex: { flex: 1 },
+  listContent: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 110, flexGrow: 1 },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: '#14201C', marginBottom: 4 },
   emptySub: { fontSize: 13, color: '#8B9A94' },
-  dateGroup: { marginBottom: 18 },
-  dateGroupHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 9 },
+  dateGroupHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, marginBottom: 9 },
   dateGroupTitle: { fontSize: 12, fontWeight: '700', color: '#14201C', letterSpacing: 0.4 },
   divider: { flex: 1, height: 1, backgroundColor: 'rgba(20,32,28,0.09)' },
   dayExportBtn: { backgroundColor: '#F0EDE5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
