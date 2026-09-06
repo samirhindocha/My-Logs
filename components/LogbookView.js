@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -19,6 +19,7 @@ const FILTER_OPTIONS = ['All', ...CORE_SLOT_NAMES, 'Other'];
 export default function LogbookView({
   entries = [],
   scrollOffsetRef,
+  scrollTargetIdRef,
   onOpenExport,
   onOpenConfig,
   onGoTrends,
@@ -32,7 +33,7 @@ export default function LogbookView({
   const [slotFilter, setSlotFilter] = useState('All');
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const sectionListRef = useRef(null);
-  const hasRestoredScroll = useRef(false);
+  const scrollTargetInfoRef = useRef(null);
 
   const filteredEntries =
     slotFilter === 'All'
@@ -48,6 +49,44 @@ export default function LogbookView({
   });
   const dateKeys = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
   const sections = dateKeys.map((dateStr) => ({ dateStr, data: byDate[dateStr] }));
+
+  // LogbookView fully unmounts/remounts whenever App.js swaps away to the edit
+  // screen and back, so the SectionList has no native scroll memory of its own.
+  // On the fresh mount after an edit, jump back to the record that was edited
+  // (by id, since editing can move it to a different date section); otherwise
+  // fall back to the raw pixel offset captured before navigating away (e.g.
+  // after adding a new entry). Runs once per mount — a couple of delayed
+  // attempts because the list needs a layout pass before scrollToLocation is
+  // reliable, especially for an item outside the initial render window.
+  useEffect(() => {
+    const targetId = scrollTargetIdRef?.current;
+    if (scrollTargetIdRef) scrollTargetIdRef.current = null;
+
+    const restore = () => {
+      if (targetId) {
+        for (let s = 0; s < sections.length; s++) {
+          const itemIndex = sections[s].data.findIndex((it) => it.id === targetId);
+          if (itemIndex !== -1) {
+            const target = { sectionIndex: s, itemIndex, viewOffset: 90 };
+            scrollTargetInfoRef.current = target;
+            sectionListRef.current?.scrollToLocation({ ...target, animated: false });
+            return;
+          }
+        }
+      }
+      if (scrollOffsetRef && scrollOffsetRef.current > 0) {
+        sectionListRef.current?.getScrollResponder()?.scrollTo({ y: scrollOffsetRef.current, animated: false });
+      }
+    };
+
+    const t1 = setTimeout(restore, 60);
+    const t2 = setTimeout(restore, 300);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Dynamic slot average
   const slotMatches = entries.filter(
@@ -213,17 +252,15 @@ Before Dinner: ${pmDose}`;
           if (scrollOffsetRef) scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
         }}
         scrollEventThrottle={32}
-        onContentSizeChange={() => {
-          // LogbookView remounts fresh every time an edit navigates away and back
-          // (App.js swaps `view` to 'entry' then back to 'log'), so the list has no
-          // native scroll memory — restore the offset we captured before leaving.
-          if (!hasRestoredScroll.current && scrollOffsetRef && scrollOffsetRef.current > 0) {
-            hasRestoredScroll.current = true;
-            const offset = scrollOffsetRef.current;
-            requestAnimationFrame(() => {
-              sectionListRef.current?.getScrollResponder()?.scrollTo({ y: offset, animated: false });
-            });
-          }
+        onScrollToIndexFailed={() => {
+          // scrollToLocation can fail if the target hasn't been measured yet
+          // (item far outside the initial render window) — retry once the
+          // list has had a chance to lay out more rows.
+          const target = scrollTargetInfoRef.current;
+          if (!target) return;
+          setTimeout(() => {
+            sectionListRef.current?.scrollToLocation({ ...target, animated: false });
+          }, 100);
         }}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -262,7 +299,7 @@ Before Dinner: ${pmDose}`;
                 <View style={styles.cardTitleRow}>
                   <Text style={styles.cardTitle}>
                     {item.slot}
-                    {item.rolledFromNextDay ? ' (past midnight)' : ''}
+                    {item.rolledFromNextDay ? 'MN' : ''}
                   </Text>
                   {item.source === 'mysugr' && (
                     <Text style={styles.importBadge}>📥</Text>

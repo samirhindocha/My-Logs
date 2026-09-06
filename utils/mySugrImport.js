@@ -10,7 +10,7 @@ import { SLOTS } from '../constants/theme';
 const CORE_SLOT_NAMES = SLOTS.filter((s) => s.name !== 'Custom').map((s) => s.name);
 
 export const DEFAULT_SLOT_TIME_WINDOWS = {
-  Fasting: { start: '07:00', end: '10:00' },
+  Fasting: { start: '06:30', end: '10:00' },
   'Before Lunch': { start: '12:00', end: '14:00' },
   'After Lunch 2hr': { start: '14:00', end: '17:30' },
   'Before Dinner': { start: '20:30', end: '22:00' },

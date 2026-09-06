@@ -28,6 +28,7 @@ export default function App() {
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
   const logScrollOffsetRef = useRef(0);
+  const logScrollTargetIdRef = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -231,14 +232,17 @@ export default function App() {
         <LogbookView
           entries={entries}
           scrollOffsetRef={logScrollOffsetRef}
+          scrollTargetIdRef={logScrollTargetIdRef}
           onOpenExport={() => setIsExportOpen(true)}
           onOpenConfig={() => setIsConfigOpen(true)}
           onGoTrends={() => setView('trends')}
           onOpenEntry={() => {
+            logScrollTargetIdRef.current = null;
             setEditingEntry(null);
             setView('entry');
           }}
           onEditEntry={(item) => {
+            logScrollTargetIdRef.current = item.id;
             setEditingEntry(item);
             setView('entry');
           }}
