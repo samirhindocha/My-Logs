@@ -100,6 +100,28 @@ const inWindow = (t, startMinutes, endMinutes) => {
   return t >= startMinutes || t < endMinutes; // window wraps past midnight
 };
 
+// "2026-08-05" -> "2026-08-04"
+const shiftDateBack = (dateStr) => {
+  const [y, m, d] = dateStr.split('-').map((n) => parseInt(n, 10));
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() - 1);
+  return dt.toISOString().split('T')[0];
+};
+
+// A slot window that wraps past midnight (e.g. After Dinner 23:00-00:30) covers
+// two calendar dates. A reading logged in the early-morning tail of that window
+// (e.g. 00:29) belongs, day-wise, to the night before it — so its log-book
+// bucket date rolls back a day rather than staying on the raw CSV date.
+const resolveBucketDate = (rawDate, totalMinutes, slotName, windows) => {
+  const win = windows?.[slotName];
+  if (!win) return { bucketDate: rawDate, rolledFromNextDay: false };
+  const start = parseHHMM(win.start);
+  const end = parseHHMM(win.end);
+  if (start == null || end == null || start <= end) return { bucketDate: rawDate, rolledFromNextDay: false };
+  if (totalMinutes >= end) return { bucketDate: rawDate, rolledFromNextDay: false };
+  return { bucketDate: shiftDateBack(rawDate), rolledFromNextDay: true };
+};
+
 // Best-effort meal-slot guess from time of day, using the (possibly user-edited)
 // slot time windows. Anything outside every window is left as "Custom".
 const guessSlotFromMinutes = (totalMinutes, windows) => {
@@ -144,11 +166,15 @@ export const parseMySugrCsv = (csvText, slotTimeWindows = DEFAULT_SLOT_TIME_WIND
 
     const time = timeCol >= 0 ? parseMySugrTime(cols[timeCol]) : null;
     const slot = time ? guessSlotFromMinutes(time.totalMinutes, slotTimeWindows) : 'Custom';
+    const { bucketDate, rolledFromNextDay } = time
+      ? resolveBucketDate(date, time.totalMinutes, slot, slotTimeWindows)
+      : { bucketDate: date, rolledFromNextDay: false };
 
     entries.push({
-      date,
+      date: bucketDate,
       time: time ? time.display : '',
       slot,
+      rolledFromNextDay,
       reading,
       isExtremeLow: reading < 50,
       isExtremeHigh: reading > 250,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -18,6 +18,7 @@ const FILTER_OPTIONS = ['All', ...CORE_SLOT_NAMES, 'Other'];
 
 export default function LogbookView({
   entries = [],
+  scrollOffsetRef,
   onOpenExport,
   onOpenConfig,
   onGoTrends,
@@ -30,6 +31,8 @@ export default function LogbookView({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [slotFilter, setSlotFilter] = useState('All');
   const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const sectionListRef = useRef(null);
+  const hasRestoredScroll = useRef(false);
 
   const filteredEntries =
     slotFilter === 'All'
@@ -196,6 +199,7 @@ Before Dinner: ${pmDose}`;
       {/* Day Groups List — virtualized so a large mySugr import doesn't render
           hundreds of cards eagerly (that was crashing the app on big imports) */}
       <SectionList
+        ref={sectionListRef}
         style={styles.listFlex}
         contentContainerStyle={styles.listContent}
         sections={sections}
@@ -205,6 +209,22 @@ Before Dinner: ${pmDose}`;
         windowSize={7}
         maxToRenderPerBatch={20}
         removeClippedSubviews={Platform.OS === 'android'}
+        onScroll={(e) => {
+          if (scrollOffsetRef) scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={32}
+        onContentSizeChange={() => {
+          // LogbookView remounts fresh every time an edit navigates away and back
+          // (App.js swaps `view` to 'entry' then back to 'log'), so the list has no
+          // native scroll memory — restore the offset we captured before leaving.
+          if (!hasRestoredScroll.current && scrollOffsetRef && scrollOffsetRef.current > 0) {
+            hasRestoredScroll.current = true;
+            const offset = scrollOffsetRef.current;
+            requestAnimationFrame(() => {
+              sectionListRef.current?.getScrollResponder()?.scrollTo({ y: offset, animated: false });
+            });
+          }
+        }}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>{entries.length === 0 ? 'No logs yet' : 'No matching records'}</Text>
@@ -240,7 +260,10 @@ Before Dinner: ${pmDose}`;
               <View style={[styles.colorDot, { backgroundColor: status.color }]} />
               <View style={styles.cardMain}>
                 <View style={styles.cardTitleRow}>
-                  <Text style={styles.cardTitle}>{item.slot}</Text>
+                  <Text style={styles.cardTitle}>
+                    {item.slot}
+                    {item.rolledFromNextDay ? ' (past midnight)' : ''}
+                  </Text>
                   {item.source === 'mysugr' && (
                     <Text style={styles.importBadge}>📥</Text>
                   )}

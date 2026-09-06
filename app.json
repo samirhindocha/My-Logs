@@ -20,7 +20,7 @@
       "package": "com.my.logs",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0D6E5E"
       }
     },
     "extra": {

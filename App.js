@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, SafeAreaView, StatusBar, Platform, View, ActivityIndicator, BackHandler, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
@@ -27,6 +27,7 @@ export default function App() {
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
+  const logScrollOffsetRef = useRef(0);
 
   useEffect(() => {
     let isMounted = true;
@@ -229,6 +230,7 @@ export default function App() {
       {view === 'log' && (
         <LogbookView
           entries={entries}
+          scrollOffsetRef={logScrollOffsetRef}
           onOpenExport={() => setIsExportOpen(true)}
           onOpenConfig={() => setIsConfigOpen(true)}
           onGoTrends={() => setView('trends')}

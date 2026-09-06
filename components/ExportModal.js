@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View, Modal, TextInput, TouchableOpacity } from 'react-native';
 
 export default function ExportModal({ visible, onClose, onExportPDF, onExportDOCX }) {
-  const [startDate, setStartDate] = useState(
-    new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
-  );
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 3);
+    return d.toISOString().split('T')[0];
+  });
   const [endDate, setEndDate] = useState(
     new Date().toISOString().split('T')[0]
   );
