@@ -4,6 +4,23 @@ import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
 import { buildDocxBytes } from './docxBuilder';
 
+// Single source of truth for column labels/order and relative widths, shared
+// between the PDF (HTML) and Word (OOXML) table builders so both exports
+// line up with the reference layout.
+const COLUMNS = [
+  { key: 'date', label: 'Date', pct: 14 },
+  { key: 'fasting', label: 'Fasting', pct: 10 },
+  { key: 'beforeLunch', label: 'Before Lunch', pct: 11 },
+  { key: 'afterLunch', label: 'After Lunch', pct: 11 },
+  { key: 'beforeDinner', label: 'Before Dinner', pct: 11 },
+  { key: 'afterDinner', label: 'After Dinner', pct: 12 },
+  { key: 'threeAm', label: '3 AM', pct: 9 },
+  { key: 'otherText', label: 'Other', pct: 15 },
+  { key: 'unitText', label: 'Unit', pct: 7 },
+];
+
+const ROWS_PER_PAGE = 28;
+
 const formatShortDate = (dateStr) => {
   if (!dateStr) return '';
   const parts = dateStr.split('-');
@@ -90,22 +107,33 @@ const buildExportMatrix = (entries, startDate, endDate) => {
 };
 
 const buildTableHtml = (rows) => {
-  const tableRows = rows
-    .map(
-      (r) => `
-      <tr>
-        <td style="font-weight:bold;">${r.date}</td>
-        <td>${r.fasting}</td>
-        <td>${r.beforeLunch}</td>
-        <td>${r.afterLunch}</td>
-        <td>${r.beforeDinner}</td>
-        <td>${r.afterDinner}</td>
-        <td>${r.threeAm}</td>
-        <td>${r.otherText}</td>
-        <td>${r.unitText}</td>
-      </tr>`
-    )
-    .join('');
+  const colgroup = `<colgroup>${COLUMNS.map((c) => `<col style="width:${c.pct}%;">`).join('')}</colgroup>`;
+  const headerRow = `<tr>${COLUMNS.map((c) => `<th>${c.label}</th>`).join('')}</tr>`;
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / ROWS_PER_PAGE));
+  const pages = [];
+  for (let p = 0; p < pageCount; p++) {
+    const pageRows = rows.slice(p * ROWS_PER_PAGE, (p + 1) * ROWS_PER_PAGE);
+    const bodyRows = pageRows.length
+      ? pageRows
+          .map(
+            (r) => `<tr>${COLUMNS.map(
+              (c) => `<td${c.key === 'date' ? ' style="font-weight:bold;"' : ''}>${r[c.key]}</td>`
+            ).join('')}</tr>`
+          )
+          .join('')
+      : `<tr><td colspan="${COLUMNS.length}">No records for this period.</td></tr>`;
+
+    pages.push(`
+      <div class="page">
+        <table>
+          ${colgroup}
+          <thead>${headerRow}</thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+        <div class="pageNumber">${p + 1}</div>
+      </div>`);
+  }
 
   return `
     <!DOCTYPE html>
@@ -113,32 +141,20 @@ const buildTableHtml = (rows) => {
       <head>
         <meta charset="utf-8">
         <style>
-          @page { size: portrait; margin: 10mm; }
-          body { font-family: Arial, sans-serif; padding: 10px; color: #000; }
+          @page { size: A4 portrait; margin: 10mm; }
+          body { font-family: Arial, sans-serif; margin: 0; color: #000; }
+          .page { page-break-after: always; }
+          .page:last-child { page-break-after: auto; }
           table { width: 100%; border-collapse: collapse; border: 2px solid #000; table-layout: fixed; }
-          th, td { border: 1.5px solid #000; padding: 4px 3px; text-align: center; font-size: 9px; word-wrap: break-word; }
-          th { font-weight: bold; font-size: 10px; background-color: #f3f3f3; }
+          thead { display: table-header-group; }
+          tr { page-break-inside: avoid; }
+          th, td { border: 1.5px solid #000; padding: 8px 4px; text-align: center; vertical-align: middle; font-size: 14px; word-wrap: break-word; }
+          th { font-weight: bold; background-color: #f3f3f3; }
+          .pageNumber { text-align: center; font-size: 12px; margin-top: 8px; page-break-inside: avoid; }
         </style>
       </head>
       <body>
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Fasting</th>
-              <th>Before Lunch</th>
-              <th>After Lunch</th>
-              <th>Before Dinner</th>
-              <th>After Dinner</th>
-              <th>3 AM</th>
-              <th>Other</th>
-              <th>Unit</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRows || '<tr><td colspan="9">No records for this period.</td></tr>'}
-          </tbody>
-        </table>
+        ${pages.join('')}
       </body>
     </html>
   `;
@@ -149,7 +165,9 @@ export const exportLogsToPDF = async (entries, startDate, endDate) => {
   const html = buildTableHtml(rows);
 
   try {
-    const { uri } = await Print.printToFileAsync({ html });
+    // A4 in points (matches the @page size above) so the actual generated
+    // PDF page dimensions line up with the CSS pagination math.
+    const { uri } = await Print.printToFileAsync({ html, width: 595, height: 842 });
     await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
     return true;
   } catch (error) {
@@ -160,24 +178,19 @@ export const exportLogsToPDF = async (entries, startDate, endDate) => {
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
+// A4 page width (11906 dxa) minus 720-dxa left/right margins = 10466 dxa
+// of usable width, split across columns using the same ratios as the PDF.
+const PAGE_USABLE_WIDTH_DXA = 10466;
+const COLUMN_WIDTHS_DXA = COLUMNS.map((c) => Math.round((PAGE_USABLE_WIDTH_DXA * c.pct) / 100));
+
 export const exportLogsToDOCX = async (entries, startDate, endDate) => {
   const matrix = buildExportMatrix(entries, startDate, endDate);
-  const headers = ['Date', 'Fasting', 'Before Lunch', 'After Lunch', 'Before Dinner', 'After Dinner', '3 AM', 'Other', 'Unit'];
-  const rows = matrix.map((r) => [
-    r.date,
-    r.fasting,
-    r.beforeLunch,
-    r.afterLunch,
-    r.beforeDinner,
-    r.afterDinner,
-    r.threeAm,
-    r.otherText,
-    r.unitText,
-  ]);
+  const headers = COLUMNS.map((c) => c.label);
+  const rows = matrix.map((r) => COLUMNS.map((c) => r[c.key]));
   const fileName = `Glucose_Logs_${startDate}_to_${endDate}.docx`;
 
   try {
-    const bytes = buildDocxBytes({ title: 'Glucose Logs Export', headers, rows });
+    const bytes = buildDocxBytes({ headers, rows, columnWidths: COLUMN_WIDTHS_DXA });
 
     if (Platform.OS === 'web') {
       const blob = new Blob([bytes], { type: DOCX_MIME });

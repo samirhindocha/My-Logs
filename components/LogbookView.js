@@ -299,7 +299,7 @@ Before Dinner: ${pmDose}`;
                 <View style={styles.cardTitleRow}>
                   <Text style={styles.cardTitle}>
                     {item.slot}
-                    {item.rolledFromNextDay ? 'MN' : ''}
+                    {item.rolledFromNextDay ? ' (↓)' : ''}
                   </Text>
                   {item.source === 'mysugr' && (
                     <Text style={styles.importBadge}>📥</Text>
