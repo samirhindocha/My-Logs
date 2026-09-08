@@ -36,6 +36,28 @@ export const formatDateHeader = (dateStr) => {
   });
 };
 
+// User-facing manual date entry is DD-MM-YYYY; internally entries/config are
+// keyed by ISO YYYY-MM-DD strings, so these convert at the input boundary.
+export const parseDDMMYYYY = (str) => {
+  const match = String(str ?? '').trim().match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (!match) return null;
+  const [, dd, mm, yyyy] = match;
+  const day = Number(dd);
+  const month = Number(mm);
+  const year = Number(yyyy);
+  const d = new Date(year, month - 1, day);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+export const formatDDMMYYYY = (isoStr) => {
+  if (!isoStr) return '';
+  const parts = isoStr.split('-');
+  if (parts.length !== 3) return '';
+  const [year, month, day] = parts;
+  return `${day}-${month}-${year}`;
+};
+
 export const formatDateDisplay = (dateObj) => {
   if (!dateObj) return '';
   const today = new Date();

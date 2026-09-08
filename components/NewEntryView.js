@@ -12,7 +12,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import TextRecognition from '@react-native-ml-kit/text-recognition';
 import { SLOTS } from '../constants/theme';
-import { formatDateDisplay, getReadingStatus } from '../utils/storage';
+import { formatDateDisplay, getReadingStatus, parseDDMMYYYY, formatDDMMYYYY } from '../utils/storage';
 import { parseAccuChekDisplay } from '../utils/ocrParser';
 
 const CORE_SLOT_NAMES = SLOTS.filter((s) => s.name !== 'Custom').map((s) => s.name);
@@ -41,7 +41,7 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel, e
 
   const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
   const [jumpDateInput, setJumpDateInput] = useState(
-    new Date().toISOString().split('T')[0]
+    formatDDMMYYYY(new Date().toISOString().split('T')[0])
   );
 
   const shiftDay = (days) => {
@@ -51,12 +51,12 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel, e
   };
 
   const handleJumpDateConfirm = () => {
-    const parsed = new Date(jumpDateInput);
-    if (isNaN(parsed.getTime())) {
-      Alert.alert('Invalid Date', 'Please enter a valid date in YYYY-MM-DD format.');
+    const iso = parseDDMMYYYY(jumpDateInput);
+    if (!iso) {
+      Alert.alert('Invalid Date', 'Please enter a valid date in DD-MM-YYYY format.');
       return;
     }
-    setSelectedDate(parsed);
+    setSelectedDate(new Date(iso));
     setIsJumpModalOpen(false);
   };
 
@@ -405,12 +405,12 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel, e
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Jump to Date</Text>
-            <Text style={styles.modalSubtitle}>Enter date in YYYY-MM-DD format:</Text>
+            <Text style={styles.modalSubtitle}>Enter date in DD-MM-YYYY format:</Text>
             <TextInput
               style={styles.modalInput}
               value={jumpDateInput}
               onChangeText={setJumpDateInput}
-              placeholder="YYYY-MM-DD"
+              placeholder="DD-MM-YYYY"
             />
             <View style={styles.modalBtnRow}>
               <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setIsJumpModalOpen(false)}>

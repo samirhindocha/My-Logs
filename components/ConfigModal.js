@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View, Modal, TextInput, TouchableOpacity, Alert, ScrollView } from 'react-native';
 import { SLOTS } from '../constants/theme';
 import { DEFAULT_SLOT_TIME_WINDOWS } from '../utils/mySugrImport';
+import { parseDDMMYYYY, formatDDMMYYYY } from '../utils/storage';
 
 const CORE_SLOT_NAMES = SLOTS.filter((s) => s.name !== 'Custom').map((s) => s.name);
 const HHMM_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
 
 export default function ConfigModal({ visible, config, onClose, onSaveConfig, onSendTestNotification, onCheckRemindersNow }) {
-  const [lastAppointment, setLastAppointment] = useState(config.lastDoctorAppointment || '');
+  const [lastAppointment, setLastAppointment] = useState(formatDDMMYYYY(config.lastDoctorAppointment) || '');
   const [missingDays, setMissingDays] = useState(config.missingSlotDaysThreshold || '20');
   const [sixReportsDays, setSixReportsDays] = useState(config.sixReportsReminderDays || '14');
   const [slotWindows, setSlotWindows] = useState({
@@ -20,6 +21,13 @@ export default function ConfigModal({ visible, config, onClose, onSaveConfig, on
   };
 
   const handleSave = () => {
+    const trimmedAppointment = lastAppointment.trim();
+    const isoAppointment = trimmedAppointment ? parseDDMMYYYY(trimmedAppointment) : '';
+    if (trimmedAppointment && !isoAppointment) {
+      Alert.alert('Invalid Date', 'Please enter the appointment date in DD-MM-YYYY format.');
+      return;
+    }
+
     const sanitizedWindows = {};
     CORE_SLOT_NAMES.forEach((slotName) => {
       const win = slotWindows[slotName] || {};
@@ -30,7 +38,7 @@ export default function ConfigModal({ visible, config, onClose, onSaveConfig, on
     });
 
     onSaveConfig({
-      lastDoctorAppointment: lastAppointment.trim(),
+      lastDoctorAppointment: isoAppointment,
       missingSlotDaysThreshold: missingDays.trim() || '20',
       sixReportsReminderDays: sixReportsDays.trim() || '14',
       slotTimeWindows: sanitizedWindows,
@@ -52,11 +60,11 @@ export default function ConfigModal({ visible, config, onClose, onSaveConfig, on
 
           <ScrollView showsVerticalScrollIndicator={false}>
 
-          <Text style={styles.fieldLabel}>Last Doctor Appointment Date (YYYY-MM-DD)</Text>
+          <Text style={styles.fieldLabel}>Last Doctor Appointment Date (DD-MM-YYYY)</Text>
           <TextInput
             style={styles.input}
             value={lastAppointment}
-            placeholder="e.g. 2026-06-01"
+            placeholder="e.g. 01-06-2026"
             onChangeText={setLastAppointment}
           />
           <Text style={styles.helperText}>Reminder triggers automatically at 2.5 months (15 days prior to 3-month cycle).</Text>

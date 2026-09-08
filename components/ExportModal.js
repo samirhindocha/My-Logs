@@ -1,15 +1,26 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, Modal, TextInput, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, Modal, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { parseDDMMYYYY, formatDDMMYYYY } from '../utils/storage';
 
 export default function ExportModal({ visible, onClose, onExportPDF, onExportDOCX }) {
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 3);
-    return d.toISOString().split('T')[0];
+    return formatDDMMYYYY(d.toISOString().split('T')[0]);
   });
   const [endDate, setEndDate] = useState(
-    new Date().toISOString().split('T')[0]
+    formatDDMMYYYY(new Date().toISOString().split('T')[0])
   );
+
+  const resolveRange = () => {
+    const start = parseDDMMYYYY(startDate);
+    const end = parseDDMMYYYY(endDate);
+    if (!start || !end) {
+      Alert.alert('Invalid Date', 'Please enter dates in DD-MM-YYYY format.');
+      return null;
+    }
+    return { start, end };
+  };
 
   return (
     <Modal visible={visible} transparent animationType="fade">
@@ -23,14 +34,14 @@ export default function ExportModal({ visible, onClose, onExportPDF, onExportDOC
           </View>
 
           <Text style={styles.modalSub}>
-            Select date range period (YYYY-MM-DD) to export the table report.
+            Select date range period (DD-MM-YYYY) to export the table report.
           </Text>
 
           <Text style={styles.fieldLabel}>Start Date</Text>
           <TextInput
             style={styles.modalInput}
             value={startDate}
-            placeholder="YYYY-MM-DD"
+            placeholder="DD-MM-YYYY"
             onChangeText={setStartDate}
           />
 
@@ -38,7 +49,7 @@ export default function ExportModal({ visible, onClose, onExportPDF, onExportDOC
           <TextInput
             style={styles.modalInput}
             value={endDate}
-            placeholder="YYYY-MM-DD"
+            placeholder="DD-MM-YYYY"
             onChangeText={setEndDate}
           />
 
@@ -46,14 +57,20 @@ export default function ExportModal({ visible, onClose, onExportPDF, onExportDOC
           <View style={styles.actionRow}>
             <TouchableOpacity
               style={[styles.exportBtn, styles.pdfBtn]}
-              onPress={() => onExportPDF(startDate, endDate)}
+              onPress={() => {
+                const range = resolveRange();
+                if (range) onExportPDF(range.start, range.end);
+              }}
             >
               <Text style={styles.exportBtnText}>Export .PDF</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.exportBtn, styles.docxBtn]}
-              onPress={() => onExportDOCX(startDate, endDate)}
+              onPress={() => {
+                const range = resolveRange();
+                if (range) onExportDOCX(range.start, range.end);
+              }}
             >
               <Text style={styles.exportBtnText}>Export .DOCX</Text>
             </TouchableOpacity>
