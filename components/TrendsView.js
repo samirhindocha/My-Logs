@@ -78,6 +78,13 @@ export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
       return a.date.localeCompare(b.date);
     });
 
+  // Estimated HbA1c from the period's average glucose (ADAG formula).
+  const validReadingValues = allReadings.map((e) => Number(e.reading));
+  const avgGlucose = validReadingValues.length
+    ? validReadingValues.reduce((a, b) => a + b, 0) / validReadingValues.length
+    : null;
+  const estimatedA1c = avgGlucose !== null ? ((avgGlucose + 46.7) / 28.7).toFixed(1) : null;
+
   // Insulin split averages
   const amDoses = periodEntries.map((e) => Number(e.am)).filter((v) => v > 0);
   const pmDoses = periodEntries.map((e) => Number(e.pm)).filter((v) => v > 0);
@@ -274,6 +281,27 @@ export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
                 </Text>
               ))}
             </View>
+          )}
+        </View>
+
+        {/* Estimated HbA1c */}
+        <View style={styles.card}>
+          <View style={styles.chartHeader}>
+            <Text style={styles.cardTitle}>Estimated HbA1c</Text>
+            <Text style={styles.unitText}>%</Text>
+          </View>
+          {estimatedA1c ? (
+            <>
+              <View style={styles.a1cRow}>
+                <Text style={styles.a1cValue}>{estimatedA1c}%</Text>
+                <Text style={styles.a1cAvgSub}>Avg {Math.round(avgGlucose)} mg/dL</Text>
+              </View>
+              <Text style={styles.a1cCaption}>
+                Estimated from this period's average glucose using the ADAG formula (eA1C = (avg + 46.7) ÷ 28.7). Not a lab result — view "Last 3 months" for a more clinically meaningful estimate.
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.noDataText}>No readings logged in this period</Text>
           )}
         </View>
 
@@ -516,6 +544,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8B9A94',
     fontWeight: '600',
+  },
+  a1cRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    marginTop: 4,
+  },
+  a1cValue: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#14201C',
+    letterSpacing: -0.5,
+  },
+  a1cAvgSub: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8B9A94',
+  },
+  a1cCaption: {
+    fontSize: 10.5,
+    color: '#8B9A94',
+    marginTop: 8,
+    lineHeight: 15,
   },
   slotsAvgList: {
     marginTop: 14,
