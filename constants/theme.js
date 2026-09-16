@@ -1,4 +1,5 @@
 export const STORAGE_KEY = '@my_logs_glucose_data_v2';
+export const MYSUGR_IMPORT_CUTOFF_KEY = '@my_logs_mysugr_import_cutoff_v1';
 
 export const SLOTS = [
   { name: 'Fasting' },

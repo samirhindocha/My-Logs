@@ -136,11 +136,26 @@ const guessSlotFromMinutes = (totalMinutes, windows) => {
   return 'Custom';
 };
 
+// Builds a lexically-sortable key from a reading's raw (unshifted) CSV date and
+// time-of-day, so readings can be ordered/cutoff by real-world timestamp
+// regardless of which log-book date they end up bucketed under.
+const buildSortKey = (rawDate, totalMinutes) =>
+  `${rawDate}T${String(totalMinutes ?? 0).padStart(4, '0')}`;
+
 // Parses a mySugr CSV export into app-ready entry objects.
-// Returns { entries, skipped } — skipped counts rows with no usable date/reading.
-export const parseMySugrCsv = (csvText, slotTimeWindows = DEFAULT_SLOT_TIME_WINDOWS) => {
+//
+// mySugr's export always contains the full history, not just what's new since
+// the last import, so `sinceSortKey` (a value previously returned as
+// `latestSortKey`) lets callers import only readings strictly after the last
+// one they already pulled in. Returns:
+//   - entries: new, app-ready entries after `sinceSortKey` (all of them if omitted)
+//   - skipped: rows with no usable date/reading
+//   - latestSortKey: the newest reading's sort key seen in the *whole* file
+//     (including rows at/before the cutoff) — pass this back in as
+//     `sinceSortKey` on the next import.
+export const parseMySugrCsv = (csvText, slotTimeWindows = DEFAULT_SLOT_TIME_WINDOWS, sinceSortKey = null) => {
   const rows = parseCsv(csvText || '');
-  if (rows.length < 2) return { entries: [], skipped: 0 };
+  if (rows.length < 2) return { entries: [], skipped: 0, latestSortKey: sinceSortKey };
 
   const header = rows[0].map((h) => h.trim().toLowerCase());
   const colIndex = (name) => header.indexOf(name.toLowerCase());
@@ -148,10 +163,11 @@ export const parseMySugrCsv = (csvText, slotTimeWindows = DEFAULT_SLOT_TIME_WIND
   const timeCol = colIndex('Time');
   const readingCol = colIndex('Blood Sugar Measurement (mg/dL)');
 
-  if (dateCol === -1 || readingCol === -1) return { entries: [], skipped: rows.length - 1 };
+  if (dateCol === -1 || readingCol === -1) return { entries: [], skipped: rows.length - 1, latestSortKey: sinceSortKey };
 
   const entries = [];
   let skipped = 0;
+  let latestSortKey = sinceSortKey;
 
   for (let r = 1; r < rows.length; r++) {
     const cols = rows[r];
@@ -165,6 +181,11 @@ export const parseMySugrCsv = (csvText, slotTimeWindows = DEFAULT_SLOT_TIME_WIND
     }
 
     const time = timeCol >= 0 ? parseMySugrTime(cols[timeCol]) : null;
+    const sortKey = buildSortKey(date, time ? time.totalMinutes : null);
+    if (!latestSortKey || sortKey > latestSortKey) latestSortKey = sortKey;
+
+    if (sinceSortKey && sortKey <= sinceSortKey) continue;
+
     const slot = time ? guessSlotFromMinutes(time.totalMinutes, slotTimeWindows) : 'Custom';
     const { bucketDate, rolledFromNextDay } = time
       ? resolveBucketDate(date, time.totalMinutes, slot, slotTimeWindows)
@@ -186,5 +207,5 @@ export const parseMySugrCsv = (csvText, slotTimeWindows = DEFAULT_SLOT_TIME_WIND
     });
   }
 
-  return { entries, skipped };
+  return { entries, skipped, latestSortKey };
 };

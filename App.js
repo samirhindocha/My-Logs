@@ -11,6 +11,7 @@ import ConfigModal from './components/ConfigModal';
 import { getStoredEntries, saveStoredEntries } from './utils/storage';
 import { exportLogsToPDF, exportLogsToDOCX } from './utils/exportReport';
 import { parseMySugrCsv } from './utils/mySugrImport';
+import { MYSUGR_IMPORT_CUTOFF_KEY } from './constants/theme';
 import {
   CONFIG_STORAGE_KEY,
   DEFAULT_CONFIG,
@@ -154,10 +155,20 @@ export default function App() {
       if (picked.canceled || !picked.assets || !picked.assets.length) return;
 
       const csvText = await new File(picked.assets[0].uri).text();
-      const { entries: parsed, skipped } = parseMySugrCsv(csvText, config.slotTimeWindows);
+      const lastImportCutoff = await AsyncStorage.getItem(MYSUGR_IMPORT_CUTOFF_KEY);
+      const { entries: parsed, skipped, latestSortKey } = parseMySugrCsv(csvText, config.slotTimeWindows, lastImportCutoff);
+
+      if (latestSortKey && latestSortKey !== lastImportCutoff) {
+        await AsyncStorage.setItem(MYSUGR_IMPORT_CUTOFF_KEY, latestSortKey);
+      }
 
       if (!parsed.length) {
-        Alert.alert('Import Failed', 'Could not find any readings in that file. Make sure it\'s a mySugr CSV export.');
+        Alert.alert(
+          'Import Failed',
+          lastImportCutoff
+            ? 'No new readings found since your last import.'
+            : 'Could not find any readings in that file. Make sure it\'s a mySugr CSV export.'
+        );
         return;
       }
 
