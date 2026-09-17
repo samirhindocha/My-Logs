@@ -11,6 +11,7 @@ import ConfigModal from './components/ConfigModal';
 import { getStoredEntries, saveStoredEntries } from './utils/storage';
 import { exportLogsToPDF, exportLogsToDOCX } from './utils/exportReport';
 import { parseMySugrCsv } from './utils/mySugrImport';
+import { exportEncryptedBackup, pickAndDecryptBackup } from './utils/backup';
 import { MYSUGR_IMPORT_CUTOFF_KEY } from './constants/theme';
 import {
   CONFIG_STORAGE_KEY,
@@ -206,6 +207,65 @@ export default function App() {
     }
   };
 
+  const handleExportBackup = async (password) => {
+    if (!password) {
+      Alert.alert('Password Required', 'Please enter a password to encrypt your backup.');
+      return;
+    }
+    try {
+      const mysugrCutoff = await AsyncStorage.getItem(MYSUGR_IMPORT_CUTOFF_KEY);
+      await exportEncryptedBackup({ entries, config, mysugrCutoff, password });
+    } catch (err) {
+      console.warn('Backup export error:', err);
+      Alert.alert('Backup Error', 'Could not create the encrypted backup file.');
+    }
+  };
+
+  const handleImportBackup = async (password) => {
+    if (!password) {
+      Alert.alert('Password Required', 'Please enter the password for this backup.');
+      return;
+    }
+    try {
+      const payload = await pickAndDecryptBackup(password);
+      if (!payload) return;
+
+      Alert.alert(
+        'Restore Backup',
+        `This will replace all current logs and settings with the backup from ${new Date(payload.exportedAt).toLocaleString()}. This cannot be undone. Continue?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Restore',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                setEntries(payload.entries);
+                await saveStoredEntries(payload.entries);
+
+                if (payload.config) {
+                  setConfig(payload.config);
+                  await AsyncStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(payload.config));
+                }
+
+                if (payload.mysugrCutoff) {
+                  await AsyncStorage.setItem(MYSUGR_IMPORT_CUTOFF_KEY, payload.mysugrCutoff);
+                }
+
+                Alert.alert('Restore Complete', 'Your data has been restored from the backup.');
+              } catch (err) {
+                console.warn('Backup restore error:', err);
+                Alert.alert('Restore Error', 'Could not apply the restored data.');
+              }
+            },
+          },
+        ]
+      );
+    } catch (err) {
+      Alert.alert('Restore Error', err.message || 'Could not restore from this backup file.');
+    }
+  };
+
   const handleSendTestNotification = async () => {
     await sendTestNotification();
     Alert.alert('Test Sent', 'Check your notification panel now. If nothing shows up, notification permission is likely blocked in your device Settings for this app.');
@@ -301,6 +361,8 @@ export default function App() {
         onSaveConfig={handleSaveConfig}
         onSendTestNotification={handleSendTestNotification}
         onCheckRemindersNow={handleCheckRemindersNow}
+        onExportBackup={handleExportBackup}
+        onImportBackup={handleImportBackup}
       />
     </SafeAreaView>
   );

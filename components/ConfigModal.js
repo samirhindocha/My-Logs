@@ -7,7 +7,16 @@ import { parseDDMMYYYY, formatDDMMYYYY } from '../utils/storage';
 const CORE_SLOT_NAMES = SLOTS.filter((s) => s.name !== 'Custom').map((s) => s.name);
 const HHMM_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
 
-export default function ConfigModal({ visible, config, onClose, onSaveConfig, onSendTestNotification, onCheckRemindersNow }) {
+export default function ConfigModal({
+  visible,
+  config,
+  onClose,
+  onSaveConfig,
+  onSendTestNotification,
+  onCheckRemindersNow,
+  onExportBackup,
+  onImportBackup,
+}) {
   const [lastAppointment, setLastAppointment] = useState(formatDDMMYYYY(config.lastDoctorAppointment) || '');
   const [missingDays, setMissingDays] = useState(config.missingSlotDaysThreshold || '20');
   const [sixReportsDays, setSixReportsDays] = useState(config.sixReportsReminderDays || '14');
@@ -15,6 +24,7 @@ export default function ConfigModal({ visible, config, onClose, onSaveConfig, on
     ...DEFAULT_SLOT_TIME_WINDOWS,
     ...(config.slotTimeWindows || {}),
   });
+  const [backupPassword, setBackupPassword] = useState('');
 
   const updateSlotWindow = (slotName, field, value) => {
     setSlotWindows((prev) => ({ ...prev, [slotName]: { ...prev[slotName], [field]: value } }));
@@ -45,6 +55,22 @@ export default function ConfigModal({ visible, config, onClose, onSaveConfig, on
     });
     onClose();
     Alert.alert('Settings Saved', 'Notification reminders updated successfully.');
+  };
+
+  const handleExportBackupPress = () => {
+    if (backupPassword.trim().length < 4) {
+      Alert.alert('Password Too Short', 'Please enter a backup password of at least 4 characters.');
+      return;
+    }
+    onExportBackup(backupPassword.trim());
+  };
+
+  const handleImportBackupPress = () => {
+    if (!backupPassword.trim()) {
+      Alert.alert('Password Required', 'Enter the password this backup was encrypted with.');
+      return;
+    }
+    onImportBackup(backupPassword.trim());
   };
 
   return (
@@ -129,6 +155,31 @@ export default function ConfigModal({ visible, config, onClose, onSaveConfig, on
             <Text style={styles.debugBtnText}>Check Reminders Now</Text>
           </TouchableOpacity>
           <Text style={styles.helperText}>Re-runs the reminder checks immediately and tells you what it found.</Text>
+
+          <View style={styles.divider} />
+
+          <Text style={styles.fieldLabel}>Backup & Restore</Text>
+          <TextInput
+            style={styles.input}
+            value={backupPassword}
+            onChangeText={setBackupPassword}
+            placeholder="Backup password"
+            secureTextEntry
+            autoCapitalize="none"
+          />
+          <Text style={styles.helperText}>
+            Used to encrypt a new backup, or to decrypt one you're restoring. Keep it safe — a lost password means a lost backup.
+          </Text>
+
+          <TouchableOpacity style={styles.debugBtn} onPress={handleExportBackupPress}>
+            <Text style={styles.debugBtnText}>Export Encrypted Backup</Text>
+          </TouchableOpacity>
+          <Text style={styles.helperText}>Saves all logs and settings to an encrypted file you can share or store anywhere.</Text>
+
+          <TouchableOpacity style={styles.debugBtn} onPress={handleImportBackupPress}>
+            <Text style={styles.debugBtnText}>Restore From Backup</Text>
+          </TouchableOpacity>
+          <Text style={styles.helperText}>Picks a backup file and replaces all current logs and settings after you confirm.</Text>
 
           </ScrollView>
         </View>
