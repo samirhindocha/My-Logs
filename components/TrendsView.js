@@ -76,7 +76,7 @@ export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
     const avg = matching.length
       ? Math.round(matching.reduce((acc, curr) => acc + Number(curr.reading), 0) / matching.length)
       : null;
-    return { name: slot.name, avg };
+    return { name: slot.name, avg, count: matching.length };
   });
 
   // Chart coordinate calculation (bounded to 20 - 350 mg/dL to prevent top/bottom dot cutoffs)
@@ -274,7 +274,10 @@ export default function TrendsView({ entries = [], onGoLog, onGoEntry }) {
               return (
                 <View key={slot.name} style={styles.slotRow}>
                   <View style={styles.slotLabelRow}>
-                    <Text style={styles.slotNameText}>{slot.name}</Text>
+                    <View style={styles.slotNameRow}>
+                      <Text style={styles.slotNameText}>{slot.name}</Text>
+                      <Text style={styles.slotCountText}>({slot.count})</Text>
+                    </View>
                     <Text style={styles.slotAvgValue}>{slot.avg || '—'}</Text>
                   </View>
                   <View style={styles.barBackground}>
@@ -538,10 +541,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'baseline',
   },
+  slotNameRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
   slotNameText: {
     fontSize: 12.5,
     fontWeight: '600',
     color: '#3D4C47',
+  },
+  slotCountText: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#8B9A94',
   },
   slotAvgValue: {
     fontSize: 12.5,

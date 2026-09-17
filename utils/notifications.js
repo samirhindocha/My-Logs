@@ -6,6 +6,7 @@ export const CONFIG_STORAGE_KEY = '@my_logs_app_config_v1';
 
 export const DEFAULT_CONFIG = {
   lastDoctorAppointment: '',
+  doctorVisits: [],
   missingSlotDaysThreshold: '10',
   sixReportsReminderDays: '15',
   slotTimeWindows: DEFAULT_SLOT_TIME_WINDOWS,

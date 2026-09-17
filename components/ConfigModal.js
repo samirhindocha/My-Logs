@@ -17,7 +17,14 @@ export default function ConfigModal({
   onExportBackup,
   onImportBackup,
 }) {
-  const [lastAppointment, setLastAppointment] = useState(formatDDMMYYYY(config.lastDoctorAppointment) || '');
+  const [doctorVisits, setDoctorVisits] = useState(() => {
+    const list = Array.isArray(config.doctorVisits) ? config.doctorVisits.slice() : [];
+    if (config.lastDoctorAppointment && !list.includes(config.lastDoctorAppointment)) {
+      list.push(config.lastDoctorAppointment);
+    }
+    return list.sort();
+  });
+  const [newVisitInput, setNewVisitInput] = useState('');
   const [missingDays, setMissingDays] = useState(config.missingSlotDaysThreshold || '20');
   const [sixReportsDays, setSixReportsDays] = useState(config.sixReportsReminderDays || '14');
   const [slotWindows, setSlotWindows] = useState({
@@ -29,14 +36,21 @@ export default function ConfigModal({
     setSlotWindows((prev) => ({ ...prev, [slotName]: { ...prev[slotName], [field]: value } }));
   };
 
-  const handleSave = () => {
-    const trimmedAppointment = lastAppointment.trim();
-    const isoAppointment = trimmedAppointment ? parseDDMMYYYY(trimmedAppointment) : '';
-    if (trimmedAppointment && !isoAppointment) {
-      Alert.alert('Invalid Date', 'Please enter the appointment date in DD-MM-YYYY format.');
+  const handleAddVisit = () => {
+    const iso = parseDDMMYYYY(newVisitInput.trim());
+    if (!iso) {
+      Alert.alert('Invalid Date', 'Please enter the visit date in DD-MM-YYYY format.');
       return;
     }
+    setDoctorVisits((prev) => Array.from(new Set([...prev, iso])).sort());
+    setNewVisitInput('');
+  };
 
+  const handleRemoveVisit = (iso) => {
+    setDoctorVisits((prev) => prev.filter((d) => d !== iso));
+  };
+
+  const handleSave = () => {
     const sanitizedWindows = {};
     CORE_SLOT_NAMES.forEach((slotName) => {
       const win = slotWindows[slotName] || {};
@@ -46,8 +60,11 @@ export default function ConfigModal({
       };
     });
 
+    const sortedVisits = [...doctorVisits].sort();
+
     onSaveConfig({
-      lastDoctorAppointment: isoAppointment,
+      lastDoctorAppointment: sortedVisits[sortedVisits.length - 1] || '',
+      doctorVisits: sortedVisits,
       missingSlotDaysThreshold: missingDays.trim() || '20',
       sixReportsReminderDays: sixReportsDays.trim() || '14',
       slotTimeWindows: sanitizedWindows,
@@ -69,14 +86,33 @@ export default function ConfigModal({
 
           <ScrollView showsVerticalScrollIndicator={false}>
 
-          <Text style={styles.fieldLabel}>Last Doctor Appointment Date (DD-MM-YYYY)</Text>
-          <TextInput
-            style={styles.input}
-            value={lastAppointment}
-            placeholder="e.g. 01-06-2026"
-            onChangeText={setLastAppointment}
-          />
-          <Text style={styles.helperText}>Reminder triggers automatically at 2.5 months (15 days prior to 3-month cycle).</Text>
+          <Text style={styles.fieldLabel}>Doctor Visits</Text>
+          {doctorVisits.length === 0 ? (
+            <Text style={styles.helperText}>No visits logged yet.</Text>
+          ) : (
+            [...doctorVisits].reverse().map((iso) => (
+              <View key={iso} style={styles.visitRow}>
+                <Text style={styles.visitDateText}>{formatDDMMYYYY(iso)}</Text>
+                <TouchableOpacity onPress={() => handleRemoveVisit(iso)}>
+                  <Text style={styles.visitRemoveText}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
+          <View style={styles.addVisitRow}>
+            <TextInput
+              style={[styles.input, styles.addVisitInput]}
+              value={newVisitInput}
+              placeholder="DD-MM-YYYY"
+              onChangeText={setNewVisitInput}
+            />
+            <TouchableOpacity style={styles.addVisitBtn} onPress={handleAddVisit}>
+              <Text style={styles.addVisitBtnText}>Add</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.helperText}>
+            Marks a line in the logbook on each visit date to separate readings before and after a checkup. The appointment reminder (2.5 months) uses the most recent visit here.
+          </Text>
 
           <Text style={styles.fieldLabel}>Missing Log Warning (Days)</Text>
           <TextInput
@@ -177,4 +213,11 @@ const styles = StyleSheet.create({
   slotWindowLabel: { flex: 1, fontSize: 12, fontWeight: '600', color: '#3D4C47' },
   slotTimeInput: { width: 64, backgroundColor: '#fff', borderWidth: 1, borderColor: 'rgba(20,32,28,0.12)', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 8, fontSize: 12.5, fontWeight: '600', color: '#14201C', textAlign: 'center' },
   slotWindowDash: { fontSize: 12, color: '#8B9A94' },
+  visitRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderWidth: 1, borderColor: 'rgba(20,32,28,0.1)', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: 6 },
+  visitDateText: { fontSize: 13, fontWeight: '600', color: '#14201C' },
+  visitRemoveText: { fontSize: 12, fontWeight: '700', color: '#C0392B' },
+  addVisitRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  addVisitInput: { flex: 1 },
+  addVisitBtn: { backgroundColor: '#0D6E5E', borderRadius: 12, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' },
+  addVisitBtnText: { color: '#EAF6F2', fontWeight: '700', fontSize: 13 },
 });

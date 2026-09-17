@@ -294,6 +294,7 @@ export default function App() {
       {view === 'log' && (
         <LogbookView
           entries={entries}
+          doctorVisits={config.doctorVisits}
           scrollOffsetRef={logScrollOffsetRef}
           scrollTargetIdRef={logScrollTargetIdRef}
           onOpenExport={() => setIsExportOpen(true)}

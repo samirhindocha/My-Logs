@@ -18,6 +18,7 @@ const FILTER_OPTIONS = ['All', ...CORE_SLOT_NAMES, 'Other'];
 
 export default function LogbookView({
   entries = [],
+  doctorVisits = [],
   scrollOffsetRef,
   scrollTargetIdRef,
   onOpenExport,
@@ -47,8 +48,13 @@ export default function LogbookView({
     byDate[e.date] = byDate[e.date] || [];
     byDate[e.date].push(e);
   });
-  const dateKeys = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
-  const sections = dateKeys.map((dateStr) => ({ dateStr, data: byDate[dateStr] }));
+  const doctorVisitSet = new Set(doctorVisits);
+  // A visit date with no logs that day still gets its own (empty) section, so
+  // its divider shows up as a timeline anchor even without readings attached.
+  const dateKeys = Array.from(new Set([...Object.keys(byDate), ...doctorVisits])).sort((a, b) =>
+    b.localeCompare(a)
+  );
+  const sections = dateKeys.map((dateStr) => ({ dateStr, data: byDate[dateStr] || [] }));
 
   // LogbookView fully unmounts/remounts whenever App.js swaps away to the edit
   // screen and back, so the SectionList has no native scroll memory of its own.
@@ -270,16 +276,27 @@ Before Dinner: ${pmDose}`;
             </Text>
           </View>
         }
-        renderSectionHeader={({ section: { dateStr } }) => (
-          <View style={styles.dateGroupHeader}>
-            <Text style={styles.dateGroupTitle}>{formatDateHeader(dateStr)}</Text>
-            <View style={styles.divider} />
-            <TouchableOpacity
-              style={styles.dayExportBtn}
-              onPress={() => handleExportSingleDay(dateStr)}
-            >
-              <Text style={styles.dayExportText}>📄 Export Day</Text>
-            </TouchableOpacity>
+        renderSectionHeader={({ section: { dateStr, data } }) => (
+          <View>
+            {doctorVisitSet.has(dateStr) && (
+              <View style={styles.doctorVisitDivider}>
+                <View style={styles.doctorVisitLine} />
+                <Text style={styles.doctorVisitLabel}>🩺 Doctor Visit</Text>
+                <View style={styles.doctorVisitLine} />
+              </View>
+            )}
+            <View style={styles.dateGroupHeader}>
+              <Text style={styles.dateGroupTitle}>{formatDateHeader(dateStr)}</Text>
+              <View style={styles.divider} />
+              {data.length > 0 && (
+                <TouchableOpacity
+                  style={styles.dayExportBtn}
+                  onPress={() => handleExportSingleDay(dateStr)}
+                >
+                  <Text style={styles.dayExportText}>📄 Export Day</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
         renderItem={({ item }) => {
@@ -439,6 +456,9 @@ const styles = StyleSheet.create({
   emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: '#14201C', marginBottom: 4 },
   emptySub: { fontSize: 13, color: '#8B9A94' },
+  doctorVisitDivider: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 22, marginBottom: 4 },
+  doctorVisitLine: { flex: 1, height: 2, borderRadius: 1, backgroundColor: '#0D6E5E' },
+  doctorVisitLabel: { fontSize: 10.5, fontWeight: '800', color: '#0D6E5E', letterSpacing: 0.6, textTransform: 'uppercase' },
   dateGroupHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, marginBottom: 9 },
   dateGroupTitle: { fontSize: 12, fontWeight: '700', color: '#14201C', letterSpacing: 0.4 },
   divider: { flex: 1, height: 1, backgroundColor: 'rgba(20,32,28,0.09)' },
