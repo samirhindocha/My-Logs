@@ -1,16 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, Modal, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { parseDDMMYYYY, formatDDMMYYYY } from '../utils/storage';
 
-export default function ExportModal({ visible, onClose, onExportPDF, onExportDOCX }) {
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 3);
-    return formatDDMMYYYY(d.toISOString().split('T')[0]);
-  });
-  const [endDate, setEndDate] = useState(
-    formatDDMMYYYY(new Date().toISOString().split('T')[0])
-  );
+export default function ExportModal({ visible, lastDoctorAppointment, onClose, onExportPDF, onExportDOCX }) {
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // Default range: from the last doctor visit if that was within the last 3
+  // months, otherwise capped at 3 months back — always through today.
+  // Recomputed each time the modal opens so it reflects the current config.
+  useEffect(() => {
+    if (!visible) return;
+
+    const today = new Date();
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+    const appointmentDate = lastDoctorAppointment ? new Date(lastDoctorAppointment) : null;
+    const defaultStart =
+      appointmentDate && !isNaN(appointmentDate.getTime()) && appointmentDate > threeMonthsAgo
+        ? appointmentDate
+        : threeMonthsAgo;
+
+    setStartDate(formatDDMMYYYY(defaultStart.toISOString().split('T')[0]));
+    setEndDate(formatDDMMYYYY(today.toISOString().split('T')[0]));
+  }, [visible, lastDoctorAppointment]);
 
   const resolveRange = () => {
     const start = parseDDMMYYYY(startDate);

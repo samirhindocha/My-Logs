@@ -11,7 +11,7 @@ import ConfigModal from './components/ConfigModal';
 import { getStoredEntries, saveStoredEntries } from './utils/storage';
 import { exportLogsToPDF, exportLogsToDOCX } from './utils/exportReport';
 import { parseMySugrCsv } from './utils/mySugrImport';
-import { exportEncryptedBackup, pickAndDecryptBackup } from './utils/backup';
+import { exportBackup, pickAndReadBackup } from './utils/backup';
 import { MYSUGR_IMPORT_CUTOFF_KEY } from './constants/theme';
 import {
   CONFIG_STORAGE_KEY,
@@ -207,27 +207,19 @@ export default function App() {
     }
   };
 
-  const handleExportBackup = async (password) => {
-    if (!password) {
-      Alert.alert('Password Required', 'Please enter a password to encrypt your backup.');
-      return;
-    }
+  const handleExportBackup = async () => {
     try {
       const mysugrCutoff = await AsyncStorage.getItem(MYSUGR_IMPORT_CUTOFF_KEY);
-      await exportEncryptedBackup({ entries, config, mysugrCutoff, password });
+      await exportBackup({ entries, config, mysugrCutoff });
     } catch (err) {
       console.warn('Backup export error:', err);
-      Alert.alert('Backup Error', 'Could not create the encrypted backup file.');
+      Alert.alert('Backup Error', 'Could not create the backup file.');
     }
   };
 
-  const handleImportBackup = async (password) => {
-    if (!password) {
-      Alert.alert('Password Required', 'Please enter the password for this backup.');
-      return;
-    }
+  const handleImportBackup = async () => {
     try {
-      const payload = await pickAndDecryptBackup(password);
+      const payload = await pickAndReadBackup();
       if (!payload) return;
 
       Alert.alert(
@@ -349,6 +341,7 @@ export default function App() {
 
       <ExportModal
         visible={isExportOpen}
+        lastDoctorAppointment={config.lastDoctorAppointment}
         onClose={() => setIsExportOpen(false)}
         onExportPDF={handleExportPDF}
         onExportDOCX={handleExportDOCX}

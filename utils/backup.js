@@ -1,8 +1,6 @@
-// Full encrypted backup/restore of everything the app persists: log entries,
-// app config (reminder settings + slot time windows), and the mySugr import
-// cutoff marker. The backup file is a password-protected JSON envelope —
-// anyone who doesn't have the password sees only opaque ciphertext.
-import CryptoJS from 'crypto-js';
+// Full backup/restore of everything the app persists: log entries, app config
+// (reminder settings + slot time windows), and the mySugr import cutoff marker.
+// Plain JSON file — no encryption.
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
@@ -10,28 +8,18 @@ import { File, Paths } from 'expo-file-system';
 const BACKUP_MAGIC = 'my-logs-backup';
 const BACKUP_FORMAT_VERSION = 1;
 
-// PBKDF2-derived key + random salt/IV per backup, rather than crypto-js's
-// convenience password mode (single-round MD5 key derivation) — this is the
-// standard, brute-force-resistant way to turn a user password into an AES key.
-const SALT_BYTES = 16;
-const IV_BYTES = 16;
-const KEY_SIZE_WORDS = 256 / 32;
-const PBKDF2_ITERATIONS = 10000;
-
 const pad2 = (n) => String(n).padStart(2, '0');
 
 const buildBackupFileName = () => {
   const d = new Date();
-  return `MyLogs_Backup_${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}.mlbackup`;
+  return `MyLogs_Backup_${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}.json`;
 };
 
-const deriveKey = (password, salt, iterations = PBKDF2_ITERATIONS) =>
-  CryptoJS.PBKDF2(password, salt, { keySize: KEY_SIZE_WORDS, iterations });
-
-// Encrypts { entries, config, mysugrCutoff } into a password-protected backup
-// file and opens the share sheet so the user can save it wherever they like.
-export const exportEncryptedBackup = async ({ entries, config, mysugrCutoff, password }) => {
+// Bundles all persisted data into a JSON backup file and opens the share
+// sheet so the user can save it wherever they like.
+export const exportBackup = async ({ entries, config, mysugrCutoff }) => {
   const payload = JSON.stringify({
+    magic: BACKUP_MAGIC,
     version: BACKUP_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
     entries,
@@ -39,28 +27,9 @@ export const exportEncryptedBackup = async ({ entries, config, mysugrCutoff, pas
     mysugrCutoff: mysugrCutoff || null,
   });
 
-  const salt = CryptoJS.lib.WordArray.random(SALT_BYTES);
-  const iv = CryptoJS.lib.WordArray.random(IV_BYTES);
-  const key = deriveKey(password, salt);
-
-  const encrypted = CryptoJS.AES.encrypt(payload, key, {
-    iv,
-    mode: CryptoJS.mode.CBC,
-    padding: CryptoJS.pad.Pkcs7,
-  });
-
-  const envelope = JSON.stringify({
-    magic: BACKUP_MAGIC,
-    version: BACKUP_FORMAT_VERSION,
-    salt: salt.toString(CryptoJS.enc.Hex),
-    iv: iv.toString(CryptoJS.enc.Hex),
-    iterations: PBKDF2_ITERATIONS,
-    ciphertext: encrypted.toString(),
-  });
-
   const file = new File(Paths.cache, buildBackupFileName());
   if (file.exists) file.delete();
-  file.write(envelope);
+  file.write(payload);
 
   await Sharing.shareAsync(file.uri, {
     UTI: 'public.json',
@@ -68,52 +37,24 @@ export const exportEncryptedBackup = async ({ entries, config, mysugrCutoff, pas
   });
 };
 
-// Lets the user pick a .mlbackup file and decrypts it with the given password.
-// Returns null if the user cancelled the picker, or throws a user-facing
-// Error if the file isn't a My Logs backup or the password is wrong.
-export const pickAndDecryptBackup = async (password) => {
+// Lets the user pick a backup file and returns its parsed contents. Returns
+// null if the user cancelled the picker, or throws a user-facing Error if the
+// file isn't a My Logs backup.
+export const pickAndReadBackup = async () => {
   const picked = await DocumentPicker.getDocumentAsync({ type: '*/*' });
   if (picked.canceled || !picked.assets || !picked.assets.length) return null;
 
   const raw = await new File(picked.assets[0].uri).text();
 
-  let envelope;
-  try {
-    envelope = JSON.parse(raw);
-  } catch {
-    throw new Error("This doesn't look like a My Logs backup file.");
-  }
-  if (envelope.magic !== BACKUP_MAGIC || !envelope.ciphertext || !envelope.salt || !envelope.iv) {
-    throw new Error("This doesn't look like a My Logs backup file.");
-  }
-
-  const salt = CryptoJS.enc.Hex.parse(envelope.salt);
-  const iv = CryptoJS.enc.Hex.parse(envelope.iv);
-  const key = deriveKey(password, salt, envelope.iterations || PBKDF2_ITERATIONS);
-
-  let decrypted = '';
-  try {
-    decrypted = CryptoJS.AES.decrypt(envelope.ciphertext, key, {
-      iv,
-      mode: CryptoJS.mode.CBC,
-      padding: CryptoJS.pad.Pkcs7,
-    }).toString(CryptoJS.enc.Utf8);
-  } catch {
-    decrypted = '';
-  }
-  if (!decrypted) {
-    throw new Error('Incorrect password or corrupted backup file.');
-  }
-
   let payload;
   try {
-    payload = JSON.parse(decrypted);
+    payload = JSON.parse(raw);
   } catch {
-    throw new Error('Incorrect password or corrupted backup file.');
+    throw new Error("This doesn't look like a My Logs backup file.");
   }
 
-  if (!Array.isArray(payload.entries)) {
-    throw new Error('Backup file is missing log data.');
+  if (payload.magic !== BACKUP_MAGIC || !Array.isArray(payload.entries)) {
+    throw new Error("This doesn't look like a My Logs backup file.");
   }
 
   return payload;
