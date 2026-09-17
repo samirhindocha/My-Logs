@@ -38,6 +38,7 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel, e
   const [amUnits, setAmUnits] = useState(editingEntry ? editingEntry.am || '' : lastEntryWithUnits?.am || '');
   const [pmUnits, setPmUnits] = useState(editingEntry ? editingEntry.pm || '' : lastEntryWithUnits?.pm || '');
   const [extraUnits, setExtraUnits] = useState(editingEntry ? editingEntry.extra || '' : '');
+  const [note, setNote] = useState(editingEntry ? editingEntry.note || '' : '');
 
   const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
   const [jumpDateInput, setJumpDateInput] = useState(
@@ -163,6 +164,7 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel, e
         am: amUnits,
         pm: pmUnits,
         extra: extraUnits,
+        note: note.trim() ? note.trim() : null,
         hidden: false,
       });
     };
@@ -355,6 +357,17 @@ export default function NewEntryView({ existingEntries = [], onSave, onCancel, e
         <Text style={styles.helperText}>
           Units auto-fill from previous entry. Values &lt;50 or &gt;250 automatically flag as extreme.
         </Text>
+
+        {/* Note */}
+        <Text style={styles.sectionHeader}>NOTE (OPTIONAL)</Text>
+        <TextInput
+          style={styles.noteInput}
+          placeholder="Add a note for this reading..."
+          placeholderTextColor="#C6CFCB"
+          value={note}
+          onChangeText={setNote}
+          multiline
+        />
       </ScrollView>
 
       {/* Keypad */}
@@ -478,6 +491,7 @@ const styles = StyleSheet.create({
   doseUnit: { fontSize: 11, fontWeight: '700', color: '#8B9A94' },
   activeCardBorder: { borderColor: '#0D6E5E' },
   helperText: { fontSize: 11, color: '#8B9A94', marginTop: 8, textAlign: 'center' },
+  noteInput: { backgroundColor: '#fff', borderWidth: 1, borderColor: 'rgba(20,32,28,0.08)', borderRadius: 14, padding: 12, fontSize: 14, fontWeight: '500', color: '#14201C', minHeight: 64, textAlignVertical: 'top' },
   keypadWrapper: { backgroundColor: '#F2EFE8', borderTopWidth: 1, borderTopColor: 'rgba(20,32,28,0.08)', padding: 10 },
   keypadIndicator: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 6, marginBottom: 8 },
   keypadTypingText: { fontSize: 11.5, fontWeight: '700', color: '#3D4C47' },

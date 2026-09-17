@@ -308,6 +308,11 @@ Before Dinner: ${pmDose}`;
                 <Text style={styles.cardMeta}>
                   {doseMeta.length ? doseMeta.join('  ·  ') : 'No dose recorded'}
                 </Text>
+                {item.note ? (
+                  <Text style={styles.cardNote} numberOfLines={2}>
+                    📝 {item.note}
+                  </Text>
+                ) : null}
               </View>
 
               <View style={styles.cardRight}>
@@ -447,6 +452,7 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 14, fontWeight: '700', letterSpacing: -0.1, color: '#14201C' },
   importBadge: { fontSize: 9 },
   cardMeta: { fontSize: 11, fontWeight: '500', color: '#8B9A94', marginTop: 2 },
+  cardNote: { fontSize: 11, fontWeight: '500', color: '#3D4C47', fontStyle: 'italic', marginTop: 2 },
   cardRight: { alignItems: 'flex-end' },
   cardValue: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
   cardStatus: { fontSize: 9.5, fontWeight: '700', color: '#8B9A94', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 1 },

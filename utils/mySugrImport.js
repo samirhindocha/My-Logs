@@ -162,6 +162,7 @@ export const parseMySugrCsv = (csvText, slotTimeWindows = DEFAULT_SLOT_TIME_WIND
   const dateCol = colIndex('Date');
   const timeCol = colIndex('Time');
   const readingCol = colIndex('Blood Sugar Measurement (mg/dL)');
+  const noteCol = colIndex('Notes') !== -1 ? colIndex('Notes') : colIndex('Note');
 
   if (dateCol === -1 || readingCol === -1) return { entries: [], skipped: rows.length - 1, latestSortKey: sinceSortKey };
 
@@ -190,6 +191,7 @@ export const parseMySugrCsv = (csvText, slotTimeWindows = DEFAULT_SLOT_TIME_WIND
     const { bucketDate, rolledFromNextDay } = time
       ? resolveBucketDate(date, time.totalMinutes, slot, slotTimeWindows)
       : { bucketDate: date, rolledFromNextDay: false };
+    const rawNote = noteCol >= 0 ? (cols[noteCol] || '').trim() : '';
 
     entries.push({
       date: bucketDate,
@@ -202,6 +204,7 @@ export const parseMySugrCsv = (csvText, slotTimeWindows = DEFAULT_SLOT_TIME_WIND
       am: '',
       pm: '',
       extra: '',
+      note: rawNote ? rawNote : null,
       hidden: false,
       source: 'mysugr',
     });
